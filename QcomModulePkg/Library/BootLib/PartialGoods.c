@@ -1,4 +1,4 @@
-/* Copyright (c) 2017,2019-2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017,2019, 2020 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -33,6 +33,7 @@
 #include <Protocol/EFIChipInfo.h>
 #include <Protocol/EFIChipInfoTypes.h>
 #include <Uefi/UefiBaseType.h>
+#include <Library/FdtRw.h>
 
 /* Look up table for cpu partial goods
  *
@@ -40,14 +41,14 @@
  *       PartialGoodsCpuType1 have to be same
  */
 static struct PartialGoods PartialGoodsCpuType0[] = {
-    {0x1, "/cpus", {"cpu@0", "device_type", "cpu", "nak"}},
-    {0x2, "/cpus", {"cpu@100", "device_type", "cpu", "nak"}},
-    {0x4, "/cpus", {"cpu@200", "device_type", "cpu", "nak"}},
-    {0x8, "/cpus", {"cpu@300", "device_type", "cpu", "nak"}},
-    {0x10, "/cpus", {"cpu@400", "device_type", "cpu", "nak"}},
-    {0x20, "/cpus", {"cpu@500", "device_type", "cpu", "nak"}},
-    {0x40, "/cpus", {"cpu@600", "device_type", "cpu", "nak"}},
-    {0x80, "/cpus", {"cpu@700", "device_type", "cpu", "nak"}},
+    {0x1, "/cpus", {"cpu@0", "enable-method", "psci", "none"}},
+    {0x2, "/cpus", {"cpu@100", "enable-method", "psci", "none"}},
+    {0x4, "/cpus", {"cpu@200", "enable-method", "psci", "none"}},
+    {0x8, "/cpus", {"cpu@300", "enable-method", "psci", "none"}},
+    {0x10, "/cpus", {"cpu@400", "enable-method", "psci", "none"}},
+    {0x20, "/cpus", {"cpu@500", "enable-method", "psci", "none"}},
+    {0x40, "/cpus", {"cpu@600", "enable-method", "psci", "none"}},
+    {0x80, "/cpus", {"cpu@700", "enable-method", "psci", "none"}},
 };
 
 /* Look up table for cpu partial goods 
@@ -56,14 +57,14 @@ static struct PartialGoods PartialGoodsCpuType0[] = {
  *       PartialGoodsCpuType1 have to be same
  */
 static struct PartialGoods PartialGoodsCpuType1[] = {
-    {0x1, "/cpus", {"cpu@101", "device_type", "cpu", "nak"}},
-    {0x2, "/cpus", {"cpu@102", "device_type", "cpu", "nak"}},
-    {0x4, "/cpus", {"cpu@103", "device_type", "cpu", "nak"}},
-    {0x8, "/cpus", {"cpu@104", "device_type", "cpu", "nak"}},
-    {0x10, "/cpus", {"cpu@105", "device_type", "cpu", "nak"}},
-    {0x20, "/cpus", {"cpu@106", "device_type", "cpu", "nak"}},
-    {0x40, "/cpus", {"cpu@107", "device_type", "cpu", "nak"}},
-    {0x80, "/cpus", {"cpu@108", "device_type", "cpu", "nak"}},
+    {0x1, "/cpus", {"cpu@101", "enable-method", "psci", "none"}},
+    {0x2, "/cpus", {"cpu@102", "enable-method", "psci", "none"}},
+    {0x4, "/cpus", {"cpu@103", "enable-method", "psci", "none"}},
+    {0x8, "/cpus", {"cpu@104", "enable-method", "psci", "none"}},
+    {0x10, "/cpus", {"cpu@105", "enable-method", "psci", "none"}},
+    {0x20, "/cpus", {"cpu@106", "enable-method", "psci", "none"}},
+    {0x30, "/cpus", {"cpu@107", "enable-method", "psci", "none"}},
+    {0x40, "/cpus", {"cpu@108", "enable-method", "psci", "none"}},
 };
 
 #define NUM_OF_CPUS (ARRAY_SIZE(PartialGoodsCpuType0))
@@ -335,7 +336,7 @@ FindNodeAndUpdateProperty (VOID *fdt,
       continue;
 
     /* Find the parent node */
-    ParentOffset = fdt_path_offset (fdt, Table->ParentNode);
+    ParentOffset = FdtPathOffset (fdt, Table->ParentNode);
     if (ParentOffset < 0) {
       DEBUG ((EFI_D_ERROR, "Failed to Get parent node: %a\terror: %d\n",
               Table->ParentNode, ParentOffset));
@@ -353,10 +354,9 @@ FindNodeAndUpdateProperty (VOID *fdt,
     }
 
      /* Add/Replace the property with Replace string value */
-    Ret = fdt_setprop (fdt, SubNodeOffset, SNode->PropertyName,
-                     (CONST VOID *)SNode->ReplaceStr,
-                     AsciiStrLen (SNode->ReplaceStr)+ 1);
-
+    Ret = FdtSetProp (fdt, SubNodeOffset, SNode->PropertyName,
+                      (CONST VOID *)SNode->ReplaceStr,
+                      AsciiStrLen (SNode->ReplaceStr) + 1);
     if (!Ret) {
       DEBUG ((EFI_D_INFO, "Partial goods (%a) status property disabled\n",
               SNode->SubNodeName));
