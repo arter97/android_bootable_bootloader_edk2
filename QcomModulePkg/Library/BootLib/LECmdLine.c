@@ -38,7 +38,9 @@
 #define MAX_VERITY_SECTOR_LEN 12
 #define MAX_VERITY_HASH_LEN 65
 #define MAX_VERITY_NAND_IGNORE_LEN 2
-STATIC CONST CHAR8 *VeritySystemPartitionStr = "/dev/mmcblk0p";
+#define MAX_VERITY_SYSTEM_PARTITION_STR_LEN 20
+STATIC CONST CHAR8 *VeritySystemPartitionStrEmmc = "/dev/mmcblk0p";
+STATIC CONST CHAR8 *VeritySystemPartitionStrNand = "/dev/ubiblock0_0";
 STATIC CONST CHAR8 *VerityName = "verity";
 STATIC CONST CHAR8 *VerityAppliedOn = "system";
 STATIC CONST CHAR8 *VerityEncriptionName = "sha256";
@@ -53,14 +55,26 @@ STATIC CONST CHAR8 *FecRoot = "fec_roots";
 STATIC CONST CHAR8 *FecBlock = "fec_blocks";
 STATIC CONST CHAR8 *FecStart = "fec_start";
 
+STATIC BOOLEAN LEVerityNandIgnore;
+
 #define FEATUREARGS 10
 #if VERITY_LE
 BOOLEAN IsLEVerity (VOID)
 {
   return TRUE;
 }
+
+BOOLEAN IsLEVerityNandIgnore (VOID)
+{
+  return LEVerityNandIgnore;
+}
 #else
 BOOLEAN IsLEVerity (VOID)
+{
+  return FALSE;
+}
+
+BOOLEAN IsLEVerityNandIgnore (VOID)
 {
   return FALSE;
 }
@@ -150,6 +164,8 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
   BOOLEAN MultiSlotBoot = FALSE;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   INT32 Index = 0;
+
+  LEVerityNandIgnore = FALSE;
 
   /* Get verity command line from SourceCmdLine */
   DMDataStr = AsciiStrStr (SourceCmdLine, "verity=");
@@ -262,6 +278,7 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       goto ErrLEVerityout;
     }
 
+    CHAR8 VeritySystemPartitionStr[MAX_VERITY_SYSTEM_PARTITION_STR_LEN];
     CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
     GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
     if (!AsciiStrCmp ("NAND", RootDevStr)) {
@@ -271,6 +288,7 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
        * by emmc and nand but nand does not support read-only limitations
        */
       if (!AsciiStrCmp ("1", NandIgnore)) {
+        LEVerityNandIgnore = TRUE;
         *LEVerityCmdLine = AllocateZeroPool (1);
         if (!*LEVerityCmdLine) {
           DEBUG ((EFI_D_ERROR, "LEVerityCmdLine buffer: Out of resources\n"));
@@ -281,6 +299,20 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         *Len = 1;
         goto ErrLEVerityout;
       }
+      AsciiSPrint (
+      VeritySystemPartitionStr,
+      MAX_VERITY_SYSTEM_PARTITION_STR_LEN,
+      "%a",
+      VeritySystemPartitionStrNand
+      );
+    } else {
+      /* Append index to EMMC partition string */
+      AsciiSPrint (
+      VeritySystemPartitionStr,
+      MAX_VERITY_SYSTEM_PARTITION_STR_LEN,
+      "%a%d",
+      VeritySystemPartitionStrEmmc, Index
+      );
     }
 
     /* Construct complete verity command line */
@@ -288,9 +320,9 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         AsciiSPrint (
         DMTemp,
         MAX_VERITY_CMD_LINE,
-        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a%d %a%d %a %a %a %d %a %a %a\"",
+        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a %a %a %a %a %d %a %a %a\"",
         VerityRoot, VerityAppliedOn, SectorSize, VerityName,
-        VeritySystemPartitionStr, Index, VeritySystemPartitionStr, Index,
+        VeritySystemPartitionStr, VeritySystemPartitionStr,
         VerityBlockSize, VerityBlockSize, DataSize, HashSize, VerityEncriptionName,
         Hash, VeritySalt
         );
@@ -299,12 +331,12 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         AsciiSPrint (
         DMTemp,
         MAX_VERITY_CMD_LINE,
-        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a%d %a%d %a %a %a %d %a %a %a %d %a %a %a %a%d %a 2 %a %a %a %a\"",
+        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a %a %a %a %a %d %a %a %a %d %a %a %a %a %a 2 %a %a %a %a\"",
         VerityRoot, VerityAppliedOn, SectorSize, VerityName,
-        VeritySystemPartitionStr, Index, VeritySystemPartitionStr, Index,
+        VeritySystemPartitionStr, VeritySystemPartitionStr,
         VerityBlockSize, VerityBlockSize, DataSize, HashSize, VerityEncriptionName,
         Hash, VeritySalt, FEATUREARGS, OptionalParam0, OptionalParam1, UseFec,
-        VeritySystemPartitionStr, Index, FecRoot, FecBlock, FecOff, FecStart, FecOff
+        VeritySystemPartitionStr, FecRoot, FecBlock, FecOff, FecStart, FecOff
         );
     }
 

@@ -377,9 +377,17 @@ GetSystemPath (CHAR8 **SysPath, BootInfo *Info)
                    " rootfstype=squashfs root=/dev/mtdblock%d ubi.mtd=%d",
                    (PartitionCount - 1), (Index - 1));
     } else {
-      AsciiSPrint (*SysPath, MAX_PATH_SIZE,
-          " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs ubi.mtd=%d",
-          (Index - 1));
+      if (IsLEVerity () &&
+          !Info->BootIntoRecovery &&
+          !IsLEVerityNandIgnore ()) {
+        AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+            " rootfstype=ext4 ubi.mtd=%d ubi.block=0,0 root=/dev/dm-0",
+            (Index - 1));
+      } else {
+        AsciiSPrint (*SysPath, MAX_PATH_SIZE,
+            " rootfstype=ubifs rootflags=bulk_read root=ubi0:rootfs ubi.mtd=%d",
+            (Index - 1));
+      }
     }
   } else if (!AsciiStrCmp ("UFS", RootDevStr)) {
     AsciiSPrint (*SysPath, MAX_PATH_SIZE, " root=/dev/sd%c%d",
@@ -919,7 +927,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   }
 
   if (HaveCmdLine) {
-    if (IsLEVerity ()) {
+    if (IsLEVerity () &&
+        !Recovery) {
       Status = GetLEVerityCmdLine (CmdLine, &LEVerityCmdLine,
                                    &LEVerityCmdLineLen);
       if (Status != EFI_SUCCESS) {
