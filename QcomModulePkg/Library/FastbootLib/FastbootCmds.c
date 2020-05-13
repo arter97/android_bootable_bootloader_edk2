@@ -1900,7 +1900,8 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     }
 
     if (EFI_ERROR (Status) ||
-      !IsUseMThreadParallel ()) {
+      !IsUseMThreadParallel () ||
+      (PartitionSize <= MaxDownLoadSize)) {
       FlashResult = HandleSparseImgFlash (PartitionName,
                                         ARRAY_SIZE (PartitionName),
                                         mFlashDataBuffer, mFlashNumDataBytes);
@@ -2409,17 +2410,14 @@ VOID ThreadSleep (TimeDuration Delay)
   KernIntf->Thread->ThreadSleep (Delay);
 }
 
-#ifdef DISABLE_MULTITHREAD_DOWNLOAD_FLASH
 BOOLEAN IsUseMThreadParallel (VOID)
 {
+  if (FixedPcdGetBool (EnableMultiThreadFlash)) {
+    return IsMultiThreadSupported;
+  }
+
   return FALSE;
 }
-#else
-BOOLEAN IsUseMThreadParallel (VOID)
-{
-  return IsMultiThreadSupported;
-}
-#endif
 
 VOID InitMultiThreadEnv ()
 {
@@ -2432,8 +2430,10 @@ VOID InitMultiThreadEnv ()
   Status = gBS->LocateProtocol (&gEfiKernelProtocolGuid, NULL,
       (VOID **)&KernIntf);
 
-  if ((Status != EFI_SUCCESS) || (KernIntf == NULL)) {
-    DEBUG ((EFI_D_INFO, "InitMultiThreadEnvMultiThread is not supported"));
+  if ((Status != EFI_SUCCESS) ||
+    (KernIntf == NULL) ||
+    KernIntf->Version < EFI_KERNEL_PROTOCOL_VER_UNSAFE_STACK_APIS) {
+    DEBUG ((EFI_D_VERBOSE, "Multi thread is not supported.\n"));
     return;
   }
 
