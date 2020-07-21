@@ -47,71 +47,6 @@
 #define FILE_INFO_SIZE (SIZE_OF_EFI_FILE_INFO + 256)
 
 STATIC UINT32 TimerFreq, FactormS;
-
-/* Returns 0 if the volume label matches otherwise non zero */
-UINTN
-CompareVolumeLabel (IN EFI_SIMPLE_FILE_SYSTEM_PROTOCOL*   Fs,
-                    IN CHAR8*                             ReqVolumeName)
-{
-  INT32 CmpResult;
-  UINT32 j;
-  UINT16 VolumeLabel[VOLUME_LABEL_SIZE];
-  EFI_FILE_PROTOCOL  *FsVolume = NULL;
-  EFI_STATUS         Status;
-  UINTN                               Size;
-  EFI_FILE_SYSTEM_INFO                *FsInfo;
-
-  // Get information about the volume
-  Status = Fs->OpenVolume (Fs, &FsVolume);
-
-  if (Status != EFI_SUCCESS)
-    return 1;
-
-  /* Get the Volume name */
-  Size = 0;
-  FsInfo = NULL;
-  Status = FsVolume->GetInfo (FsVolume, &gEfiFileSystemInfoGuid, &Size, FsInfo);
-  if (Status == EFI_BUFFER_TOO_SMALL)
-  {
-    FsInfo = AllocatePool (Size);
-    Status = FsVolume->GetInfo (FsVolume, &gEfiFileSystemInfoGuid, &Size, FsInfo);
-    if (Status != EFI_SUCCESS)
-    {
-      FreePool(FsInfo);
-      return 1;
-    }
-  }
-
-  if (FsInfo == NULL)
-    return 1;
-
-  /* Convert the passed in Volume name to Wide char and upper case */
-  for (j = 0; (j < VOLUME_LABEL_SIZE - 1) && ReqVolumeName[j]; ++j)
-  {
-    VolumeLabel[j] = ReqVolumeName[j];
-
-    if ((VolumeLabel[j] >= 'a') && (VolumeLabel[j] <= 'z'))
-      VolumeLabel[j] -= ('a' - 'A');
-  }
-
-  /* Null termination */
-  VolumeLabel[j] = 0;
-
-  /* Change any lower chars in volume name to upper (ideally this is not needed) */
-  for (j = 0; (j < VOLUME_LABEL_SIZE - 1) && FsInfo->VolumeLabel[j]; ++j)
-  {
-    if ((FsInfo->VolumeLabel[j] >= 'a') && (FsInfo->VolumeLabel[j] <= 'z'))
-      FsInfo->VolumeLabel[j] -= ('a' - 'A');
-  }
-
-  CmpResult = StrnCmp (FsInfo->VolumeLabel, VolumeLabel, VOLUME_LABEL_SIZE);
-
-  FreePool (FsInfo);
-  FsVolume->Close (FsVolume);
-
-  return CmpResult;
-}
-
 /**
   Returns a list of BlkIo handles based on required criteria
 SelectionAttrib : Bitmask representing the conditions that need
@@ -132,7 +67,7 @@ EFIAPI
 GetBlkIOHandles (IN UINT32 SelectionAttrib,
                  IN PartiSelectFilter *FilterData,
                  OUT HandleInfo *HandleInfoPtr,
-                 IN OUT UINT32* MaxBlkIopCnt)
+                 IN OUT UINT32 *MaxBlkIopCnt)
 {
   EFI_BLOCK_IO_PROTOCOL *BlkIo;
   EFI_HANDLE *BlkIoHandles;
@@ -144,11 +79,10 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
   EFI_DEVICE_PATH_PROTOCOL *DevPathInst;
   EFI_DEVICE_PATH_PROTOCOL *TempDevicePath;
   VENDOR_DEVICE_PATH *RootDevicePath;
-  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL     *Fs;
   UINT32 BlkIoCnt = 0;
   EFI_PARTITION_ENTRY *PartEntry;
 
-  if ((MaxBlkIopCnt == 0) || (HandleInfoPtr == 0))
+  if ((MaxBlkIopCnt == NULL) || (HandleInfoPtr == NULL))
     return EFI_INVALID_PARAMETER;
 
   /* Adjust some defaults first */
@@ -185,16 +119,11 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
 
     Status = gBS->HandleProtocol (BlkIoHandles[i], &gEfiBlockIoProtocolGuid,
                                   (VOID **)&BlkIo);
-    /* Fv volumes will not support Blk I/O protocol */
-    if (Status == EFI_UNSUPPORTED)
-      continue;
 
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Unable to get Filesystem Handle %r\n", Status));
       return Status;
     }
-
-    /*ASSERT_EFI_ERROR (Status);*/
 
     /* Check if the media type criteria (for removable/not) satisfies */
     if (BlkIo->Media->RemovableMedia) {
@@ -206,12 +135,12 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
     }
 
     /* Clear the pointer, we can get it if the filter is set */
-    PartitionOut = 0;
+    PartitionOut = NULL;
 
     /* Check if partition related criteria satisfies */
     if ((SelectionAttrib & FILTERS_NEEDING_DEVICEPATH) != 0) {
       Status = gBS->HandleProtocol (
-          BlkIoHandles[i], &gEfiDevicePathProtocolGuid, (VOID**)&DevPathInst);
+          BlkIoHandles[i], &gEfiDevicePathProtocolGuid, (VOID **)&DevPathInst);
 
       /* If we didn't get the DevicePath Protocol then this handle
        * cannot be used */
@@ -227,8 +156,11 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
 
       if ((SelectionAttrib & (BLK_IO_SEL_SELECT_ROOT_DEVICE_ONLY |
                               BLK_IO_SEL_MATCH_ROOT_DEVICE)) != 0) {
-        if (!FilterData)
+        if (!FilterData || (FilterData->RootDeviceType == NULL)) {
+          FreePool (BlkIoHandles);
+          BlkIoHandles = NULL;
           return EFI_INVALID_PARAMETER;
+        }
 
         /* If this is not the root device that we are looking for, ignore this
          * handle */
@@ -237,9 +169,8 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
             (RootDevicePath->Header.Length[0] |
              (RootDevicePath->Header.Length[1] << 8)) !=
                 sizeof (VENDOR_DEVICE_PATH) ||
-            ((FilterData->RootDeviceType != NULL) &&
-             (CompareGuid (FilterData->RootDeviceType,
-                           &RootDevicePath->Guid) == FALSE)))
+            CompareGuid (FilterData->RootDeviceType, &RootDevicePath->Guid) ==
+                FALSE)
           continue;
       }
 
@@ -252,10 +183,9 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
 
       /* If we need the handle for root device only and if this is representing
        * a sub partition in the root device then ignore this handle */
-      if (SelectionAttrib & BLK_IO_SEL_SELECT_ROOT_DEVICE_ONLY) {
+      if (SelectionAttrib & BLK_IO_SEL_SELECT_ROOT_DEVICE_ONLY)
         if (DevicePathDepth > 1)
           continue;
-      }
 
       /* Check if the last node is Harddrive Device path that contains the
        * Partition information */
@@ -276,53 +206,30 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
         /* PartitionDxe implementation should return partition type also */
         if ((SelectionAttrib & BLK_IO_SEL_MATCH_PARTITION_TYPE_GUID) != 0) {
           GUID *PartiType;
-          VOID *Interface;
-
-          if (!FilterData || FilterData->PartitionType == 0)
+          if (!FilterData || (FilterData->PartitionType == NULL)) {
+            FreePool (BlkIoHandles);
+            BlkIoHandles = NULL;
             return EFI_INVALID_PARAMETER;
+          }
 
-          Status = gBS->HandleProtocol (BlkIoHandles[i],
-                                        FilterData->PartitionType,
-                                        (VOID**)&Interface);
-          if (EFI_ERROR(Status)) {
-            Status = gBS->HandleProtocol (BlkIoHandles[i],
-                                          &gEfiPartitionTypeGuid,
-                                          (VOID **)&PartiType);
+          Status = gBS->HandleProtocol (BlkIoHandles[i], &gEfiPartitionTypeGuid,
+                                        (VOID **)&PartiType);
           if (Status != EFI_SUCCESS)
             continue;
 
           if (CompareGuid (PartiType, FilterData->PartitionType) == FALSE)
             continue;
-          }
         }
       }
       /* If we wanted a particular partition and didn't get the HDD DP,
          then this handle is probably not the interested ones */
       else if ((SelectionAttrib & BLK_IO_SEL_MATCH_PARTITION_TYPE_GUID) != 0)
-          continue;
-    }
-
-    /* Check if the Filesystem related criteria satisfies */
-    if ((SelectionAttrib & BLK_IO_SEL_SELECT_MOUNTED_FILESYSTEM) != 0) {
-      Status = gBS->HandleProtocol (BlkIoHandles[i],
-                               &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Fs);
-      if (Status != EFI_SUCCESS)
         continue;
-
-      if ((SelectionAttrib & BLK_IO_SEL_SELECT_BY_VOLUME_NAME) != 0) {
-        if (!FilterData || FilterData->VolumeName == 0) {
-          return EFI_INVALID_PARAMETER;
-        }
-        if (CompareVolumeLabel (Fs, FilterData->VolumeName) != 0) {
-        continue;
-        }
-      }
     }
-
     /* Check if the Partition name related criteria satisfies */
     if ((SelectionAttrib & BLK_IO_SEL_MATCH_PARTITION_LABEL) != 0) {
       Status = gBS->HandleProtocol (BlkIoHandles[i], &gEfiPartitionRecordGuid,
-                                    (VOID **) &PartEntry);
+                                    (VOID **)&PartEntry);
       if (Status != EFI_SUCCESS)
         continue;
       if (StrnCmp (PartEntry->PartitionName, FilterData->PartitionLabel,
@@ -343,8 +250,10 @@ GetBlkIOHandles (IN UINT32 SelectionAttrib,
   *MaxBlkIopCnt = BlkIoCnt;
 
   /* Free the handle buffer */
-  if (BlkIoHandles != NULL)
+  if (BlkIoHandles != NULL) {
     FreePool (BlkIoHandles);
+    BlkIoHandles = NULL;
+  }
 
   return EFI_SUCCESS;
 }
