@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -38,6 +38,7 @@
 #include <Library/ShutdownServices.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UnlockMenu.h>
+#include <Library/BootLinux.h>
 #include <Library/VerifiedBootMenu.h>
 #include <Library/Board.h>
 #include <Uefi.h>
@@ -63,7 +64,7 @@ typedef struct {
 /* Exit the key's detection */
 VOID ExitMenuKeysDetection (VOID)
 {
-  if (FixedPcdGetBool (EnableDisplayMenu)) {
+  if (IsEnableDisplayMenuFlagSupported ()) {
     /* Close the timer and event */
     if (CallbackKeyDetection) {
       gBS->SetTimer (CallbackKeyDetection, TimerCancel, 0);
@@ -87,7 +88,7 @@ VOID ExitMenuKeysDetection (VOID)
  */
 VOID WaitForExitKeysDetection (VOID)
 {
-  if (FixedPcdGetBool (EnableDisplayMenu)) {
+  if (IsEnableDisplayMenuFlagSupported ()) {
     /* Waiting for exit menu keys detection if there is no any usr action
     * otherwise it will do the action base on the keys detection event
     */
@@ -148,7 +149,7 @@ UpdateDeviceStatus (OPTION_MENU_INFO *MsgInfo, INTN Reason)
     RebootDevice (NORMAL_MODE);
     break;
   case QMMI:
-    AsciiSPrint (FfbmPageBuffer, sizeof (FfbmPageBuffer), "ffbm-02");
+    AsciiSPrint (FfbmPageBuffer, sizeof (FfbmPageBuffer), "qmmi");
     if (CardType == NAND) {
       Status = GetNandMiscPartiGuid (&Ptype);
     }
@@ -428,7 +429,7 @@ MenuKeysDetectionInit (IN VOID *mMenuInfo)
   EFI_STATUS Status = EFI_SUCCESS;
   OPTION_MENU_INFO *MenuInfo = mMenuInfo;
 
-  if (FixedPcdGetBool (EnableDisplayMenu)) {
+  if (IsEnableDisplayMenuFlagSupported ()) {
     StartTimer = GetTimerCountms ();
 
     /* Close the timer and event firstly */
