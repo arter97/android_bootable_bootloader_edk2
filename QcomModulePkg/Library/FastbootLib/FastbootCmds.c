@@ -2916,6 +2916,7 @@ CmdRebootBootloader (CONST CHAR8 *arg, VOID *data, UINT32 sz)
   FastbootFail ("Failed to reboot");
 }
 
+#if 0
 #if (defined(ENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS) ||                       \
      defined(ENABLE_UPDATE_PARTITIONS_CMDS))
 STATIC UINT8
@@ -3007,6 +3008,7 @@ CmdFlashingLock (CONST CHAR8 *arg, VOID *data, UINT32 sz)
 {
   SetDeviceUnlock (UNLOCK, FALSE);
 }
+#endif
 #endif
 
 #ifdef ENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS
@@ -3705,8 +3707,6 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
       {"erase:", CmdErase},
       {"set_active", CmdSetActive},
       {"flashing get_unlock_ability", CmdFlashingGetUnlockAbility},
-      {"flashing unlock", CmdFlashingUnlock},
-      {"flashing lock", CmdFlashingLock},
 #endif
 /*
  *CAUTION(CRITICAL): Enabling these commands will allow changes to bootimage.
