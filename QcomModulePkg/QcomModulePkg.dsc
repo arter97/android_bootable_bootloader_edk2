@@ -52,7 +52,7 @@
   DebugPrintErrorLevelLib|MdePkg/Library/BaseDebugPrintErrorLevelLib/BaseDebugPrintErrorLevelLib.inf
   MemoryAllocationLib|MdePkg/Library/UefiMemoryAllocationLib/UefiMemoryAllocationLib.inf
   BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
-  BaseMemoryLib|ArmPkg/Library/BaseMemoryLibStm/BaseMemoryLibStm.inf
+  BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
   PrintLib|MdePkg/Library/BasePrintLib/BasePrintLib.inf
   CacheMaintenanceLib|ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.inf
   IoLib|MdePkg/Library/BaseIoLibIntrinsic/BaseIoLibIntrinsic.inf
@@ -66,8 +66,6 @@
   PcdLib|MdePkg/Library/BasePcdLibNull/BasePcdLibNull.inf
   FdtLib|EmbeddedPkg/Library/FdtLib/FdtLib.inf
   LibUfdt|EmbeddedPkg/Library/LibUfdt/LibUfdt.inf
-  EfiFileLib|EmbeddedPkg/Library/EfiFileLib/EfiFileLib.inf
-  EblNetworkLib|EmbeddedPkg/Library/EblNetworkLib/EblNetworkLib.inf
   TimerLib|ArmPkg/Library/ArmArchTimerLib/ArmArchTimerLib.inf
   ArmGenericTimerCounterLib|ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.inf
   Zlib|QcomModulePkg/Library/zlib/zlib.inf
@@ -79,22 +77,22 @@
   AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
 
 [LibraryClasses.ARM]
-  ArmLib|ArmPkg/Library/ArmLib/ArmV7/ArmV7Lib.inf
+  ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
   NULL|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf
 
 [LibraryClasses.AARCH64]
-  ArmLib|ArmPkg/Library/ArmLib/AArch64/AArch64Lib.inf
+  ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
   NULL|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf
 
 [LibraryClasses.common.UEFI_APPLICATION]
-  ReportStatusCodeLib|IntelFrameworkModulePkg/Library/DxeReportStatusCodeLibFramework/DxeReportStatusCodeLib.inf
+  ReportStatusCodeLib|MdeModulePkg/Library/DxeReportStatusCodeLib/DxeReportStatusCodeLib.inf
   ExtractGuidedSectionLib|MdePkg/Library/DxeExtractGuidedSectionLib/DxeExtractGuidedSectionLib.inf
 
 [BuildOptions.common]
   GCC:*_*_*_ARCHCC_FLAGS  = -Wno-shift-negative-value -fstack-protector-all -Wno-varargs -fno-common -Wno-misleading-indentation -Wno-unknown-warning-option
   GCC:*_*_*_DLINK_FLAGS = -Ttext=0x0
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
-  GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
+  GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\" -O0
 
   !if $(VERIFIED_BOOT)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT
@@ -108,7 +106,7 @@
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
   !endif
-  !if $(TARGET_BOARD_TYPE_AUTO) == 1
+  !if $(TARGET_BOARD_TYPE_AUTO) == "1"
       GCC:*_*_*_CC_FLAGS = -DTARGET_BOARD_TYPE_AUTO
   !endif
   !if $(VERITY_LE)
@@ -166,6 +164,19 @@
 
 	QcomModulePkg/Application/LinuxLoader/LinuxLoader.inf {
 		<LibraryClasses>
+			DxeServicesTableLib|MdePkg/Library/DxeServicesTableLib/DxeServicesTableLib.inf
+			UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
+			UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
+			CacheMaintenanceLib|ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.inf
+			Zlib|QcomModulePkg/Library/zlib/zlib.inf
+			ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
+			BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
+			DebugLib|MdePkg/Library/UefiDebugLibConOut/UefiDebugLibConOut.inf
+			DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
+			HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
+			PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
+			DebugPrintErrorLevelLib|MdePkg/Library/BaseDebugPrintErrorLevelLib/BaseDebugPrintErrorLevelLib.inf
+
 			FdtLib|EmbeddedPkg/Library/FdtLib/FdtLib.inf
 			LibUfdt|EmbeddedPkg/Library/LibUfdt/LibUfdt.inf
 			ArmSmcLib|ArmPkg/Library/ArmSmcLib/ArmSmcLib.inf

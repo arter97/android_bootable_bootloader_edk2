@@ -2760,8 +2760,8 @@ CmdGetVar (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
       if (PartitionHasMultiSlot (PartNameUniStr)) {
         CurrentSlot = GetCurrentSlotSuffix ();
         UnicodeStrToAsciiStr (CurrentSlot.Suffix, CurrentSlotAsc);
-        AsciiStrnCat ((CHAR8 *)Arg, CurrentSlotAsc,
-                      AsciiStrLen (CurrentSlotAsc));
+        AsciiStrnCatS ((CHAR8 *)Arg, AsciiStrLen (CurrentSlotAsc),
+                      CurrentSlotAsc, AsciiStrLen (CurrentSlotAsc));
       }
     }
   }
@@ -3463,10 +3463,12 @@ GetPartitionType (IN CHAR16 *PartName, OUT CHAR8 * PartType)
       CheckPartitionFsSignature (PartName, &FsSignature);
       switch (FsSignature) {
         case EXT_FS_SIGNATURE:
-          AsciiStrnCpy (PartType, EXT_FS_STR, AsciiStrLen (EXT_FS_STR));
+          AsciiStrnCpyS (PartType, MAX_GET_VAR_NAME_SIZE, EXT_FS_STR,
+                          AsciiStrLen (EXT_FS_STR));
           break;
         case F2FS_FS_SIGNATURE:
-          AsciiStrnCpy (PartType, F2FS_FS_STR, AsciiStrLen (F2FS_FS_STR));
+          AsciiStrnCpyS (PartType, MAX_GET_VAR_NAME_SIZE, F2FS_FS_STR,
+                          AsciiStrLen (F2FS_FS_STR));
           break;
         case UNKNOWN_FS_SIGNATURE:
           /* Copy default hardcoded type in case unknown partition type */

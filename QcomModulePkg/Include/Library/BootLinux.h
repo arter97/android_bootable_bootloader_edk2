@@ -40,7 +40,6 @@
 #include <Library/DebugLib.h>
 #include <Library/DevicePathLib.h>
 #include <Library/DrawUI.h>
-#include <Library/EfiFileLib.h>
 #include <Library/IoLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/PcdLib.h>

@@ -1008,7 +1008,9 @@ BootLinux (BootInfo *Info)
        return Status;
   }
 
+#ifdef VERFIEID_BOOT_LE
   FreeVerifiedBootResource (Info);
+#endif
 
   /* Free the boot logo blt buffer before starting kernel */
   FreeBootLogoBltBuffer ();
