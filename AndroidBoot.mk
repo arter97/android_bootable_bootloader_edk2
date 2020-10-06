@@ -25,10 +25,10 @@ MAKEPATH=$(ANDROID_TOP)/prebuilts/build-tools/linux-x86/bin/
 endif
 
 # Use host tools from prebuilts. Partner should determine the correct host tools to use
-PREBUILT_HOST_TOOLS := CC=$(ANDROID_TOP)/$(CLANG)\ \
-		       CXX=$(ANDROID_TOP)/$(CLANG_CXX)\ \
+PREBUILT_HOST_TOOLS := BUILD_CC=$(ANDROID_TOP)/$(CLANG)\ \
+		       BUILD_CXX=$(ANDROID_TOP)/$(CLANG_CXX)\ \
 		       LDPATH=$(LDOPT)\ \
-		       AR=$(ANDROID_TOP)/$(HOST_AR)
+		       BUILD_AR=$(ANDROID_TOP)/$(HOST_AR)
 PREBUILT_PYTHON_PATH=$(ANDROID_TOP)/prebuilts/python/linux-x86/2.7.5/bin/python2
 
 DISABLE_PARALLEL_DOWNLOAD_FLASH := DISABLE_PARALLEL_DOWNLOAD_FLASH=0
