@@ -180,7 +180,7 @@
         $(OUTPUT_DIR)(+)${s_dir}(+)${s_base}.obj
 
     <Command.GCC, Command.RVCT>
-        "$(CC)" $(CC_FLAGS) $(CC_XIPFLAGS) -c -o ${dst} $(INC) ${src}
+        "$(CC)" $(CC_FLAGS) $(CC_XIPFLAGS) -c -o ${dst} @$(INC_LIST) ${src}
 
 #QTI_EDK2_PATCH Start
     <Command.CLANG80WIN, Command.CLANG80LINUX, Command.CLANG100WIN, Command.CLANG100LINUX>
