@@ -122,6 +122,15 @@ else
 	CLANG35_GCC_TOOLCHAIN := $(ANDROID_TOP)/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-$(TARGET_GCC_VERSION)
 endif
 
+# Final configurations before calling edk2's make
+# Always keep the following block towards the end of configurations.
+ifeq ($(BOARD_ABL_SIMPLE),true)
+	AB_RETRYCOUNT_DISABLE := AB_RETRYCOUNT_DISABLE=1
+	VERIFIED_BOOT := VERIFIED_BOOT=0
+	VERIFIED_BOOT_2 := VERIFIED_BOOT_2=0
+	VERIFIED_BOOT_LE := VERIFIED_BOOT_LE=0
+	DISABLE_PARALLEL_DOWNLOAD_FLASH := DISABLE_PARALLEL_DOWNLOAD_FLASH=1
+endif
 
 # ABL ELF output
 TARGET_ABL := $(PRODUCT_OUT)/abl.elf
