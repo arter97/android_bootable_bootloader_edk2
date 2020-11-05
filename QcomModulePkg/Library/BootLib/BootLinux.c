@@ -1043,6 +1043,10 @@ BootLinux (BootInfo *Info)
 
   BootStatsSetTimeStamp (BS_KERNEL_ENTRY);
 
+  if (IsVmEnabled ()) {
+    DisableHypUartUsageForLogging ();
+  }
+
   //
   // Start the Linux Kernel
   //
