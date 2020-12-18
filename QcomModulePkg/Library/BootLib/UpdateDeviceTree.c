@@ -33,6 +33,7 @@
 
 #include "UpdateDeviceTree.h"
 #include "AutoGen.h"
+#include "DisplayCtrl.h"
 #include <Library/UpdateDeviceTree.h>
 #include <Library/LocateDeviceTree.h>
 #include <Library/BootLinux.h>
@@ -771,6 +772,7 @@ OutofUpdateRankChannel:
 
   UpdateSplashMemInfo (fdt);
   UpdateDemuraInfo (fdt);
+  UpdatePLLCodesInfo (fdt);
 
   /* Get offset of the chosen node */
   ret = FdtPathOffset (fdt, "/chosen");

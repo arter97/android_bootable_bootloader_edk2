@@ -69,6 +69,7 @@
 	HypervisorMvCalls.c
 	FdtRw.c
 	ThreadStack.c
+	DisplayCtrl.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec
