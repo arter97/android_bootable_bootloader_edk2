@@ -18,7 +18,7 @@ found at
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2015 - 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015 - 2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -2752,8 +2752,10 @@ CmdGetVar (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
       if (PartitionHasMultiSlot (PartNameUniStr)) {
         CurrentSlot = GetCurrentSlotSuffix ();
         UnicodeStrToAsciiStr (CurrentSlot.Suffix, CurrentSlotAsc);
-        AsciiStrnCatS ((CHAR8 *)Arg, AsciiStrLen (CurrentSlotAsc),
-                      CurrentSlotAsc, AsciiStrLen (CurrentSlotAsc));
+        AsciiStrnCatS ((CHAR8 *)Arg,
+                        MAX_FASTBOOT_COMMAND_SIZE - AsciiStrLen ("getvar:"),
+                        CurrentSlotAsc,
+                        AsciiStrLen (CurrentSlotAsc));
       }
     }
   }
