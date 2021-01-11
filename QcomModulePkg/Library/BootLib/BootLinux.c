@@ -39,6 +39,7 @@
 #include <Protocol/EFIMdtp.h>
 #include <Protocol/EFIScmModeSwitch.h>
 #include <libufdt_sysdeps.h>
+#include <Protocol/EFIKernelInterface.h>
 
 #include "AutoGen.h"
 #include "BootImage.h"
@@ -870,6 +871,11 @@ BootLinux (BootInfo *Info)
 
   BootParamlist BootParamlistPtr = {0};
 
+  EFI_KERNEL_PROTOCOL *KernIntf = NULL;
+  Thread *ThreadNum;
+  VOID *StackBase;
+  VOID **StackCurrent;
+
   if (Info == NULL) {
     DEBUG ((EFI_D_ERROR, "BootLinux: invalid parameter Info\n"));
     return EFI_INVALID_PARAMETER;
@@ -1028,6 +1034,20 @@ BootLinux (BootInfo *Info)
       IsModeSwitch = TRUE;
   }
 
+  Status = gBS->LocateProtocol (&gEfiKernelProtocolGuid, NULL,
+        (VOID **)&KernIntf);
+
+  if ((Status != EFI_SUCCESS) ||
+      (KernIntf == NULL)) {
+    DEBUG ((EFI_D_ERROR, "Error getting kernel stack protocol. Error %r\n",
+           Status));
+    goto Exit;
+  }
+
+  ThreadNum = KernIntf->Thread->GetCurrentThread ();
+  StackBase = KernIntf->Thread->ThreadGetUnsafeSPBase (ThreadNum);
+  StackCurrent = KernIntf->Thread->ThreadGetUnsafeSPCurrent (ThreadNum);
+
   DEBUG ((EFI_D_INFO, "\nShutting Down UEFI Boot Services: %lu ms\n",
           GetTimerCountms ()));
   /*Shut down UEFI boot services*/
@@ -1039,7 +1059,12 @@ BootLinux (BootInfo *Info)
     goto Exit;
   }
 
-  PreparePlatformHardware ();
+  PreparePlatformHardware (KernIntf, (VOID *)BootParamlistPtr.KernelLoadAddr,
+                  (UINTN)BootParamlistPtr.KernelSizeActual,
+                  (VOID *)BootParamlistPtr.RamdiskLoadAddr,
+                  (UINTN)RamdiskSizeActual,
+                  (VOID *)BootParamlistPtr.DeviceTreeLoadAddr, DT_SIZE_2MB,
+                  (VOID *)StackCurrent, (UINTN)StackBase);
 
   BootStatsSetTimeStamp (BS_KERNEL_ENTRY);
 
