@@ -3,7 +3,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -47,6 +47,11 @@
 #define MAX_PATH_SIZE 72
 #define SERIAL_NUM_SIZE 64
 
+#define MEM_OFF_SIZE 16
+/* set minimum size to 6 GB */
+#define MEM_OFF_MIN 0x180000000
+#define MB_SIZE 0x100000
+
 typedef struct BootInfo BootInfo;
 
 typedef struct UpdateCmdLineParamList {
@@ -82,6 +87,7 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *LEVerityCmdLine;
   CHAR8 *FstabSuffix;
   UINT32 HeaderVersion;
+  CHAR8 *MemOffAmt;
 } UpdateCmdLineParamList;
 
 EFI_STATUS
@@ -91,7 +97,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                CHAR8 **FinalCmdLine,
-               UINT32 HeaderVersion);
+               UINT32 HeaderVersion,
+               VOID *fdt);
 BOOLEAN
 TargetBatterySocOk (UINT32 *BatteryVoltage);
 
