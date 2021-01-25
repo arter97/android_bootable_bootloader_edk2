@@ -44,7 +44,7 @@ BUILD_CXX ?= g++
 BUILD_AS ?= gcc
 BUILD_AR ?= ar
 BUILD_LD ?= ld
-LINKER ?= $(BUILD_CC)
+LINKER ?= $(BUILD_CC) $(LDPATH)
 ifeq ($(HOST_ARCH), IA32)
 ARCH_INCLUDE = -I $(MAKEROOT)/Include/Ia32/
 

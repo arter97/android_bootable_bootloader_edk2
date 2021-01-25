@@ -25,7 +25,7 @@ VFR_CXXFLAGS = $(BUILD_OPTFLAGS)
 # keep EXTRA_LDFLAGS last
 VFR_LFLAGS = $(EXTRA_LDFLAGS)
 
-LINKER = $(BUILD_CXX)
+LINKER = $(BUILD_CXX) $(LDPATH)
 
 EXTRA_CLEAN_OBJECTS = EfiVfrParser.cpp EfiVfrParser.h VfrParser.dlg VfrTokens.h VfrLexer.cpp VfrLexer.h VfrSyntax.cpp tokens.h
 
