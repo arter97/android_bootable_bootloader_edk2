@@ -31,7 +31,7 @@ BUILD_ROOT := $(ANDROID_PRODUCT_OUT)/$(TARGET)_$(TARGET_TOOLS)
 EDK_TOOLS := $(BUILDDIR)/BaseTools
 EDK_TOOLS_BIN := $(EDK_TOOLS)/Source/C/bin
 ABL_FV_IMG := $(BUILD_ROOT)/FV/abl.fv
-ABL_FV_ELF := $(BOOTLOADER_OUT)/../../abl.elf
+ABL_FV_ELF := $(BOOTLOADER_OUT)/../../unsigned_abl.elf
 SHELL:=/bin/bash
 
 # This function is to check version compatibility, used to control features based on the compiler version. \
