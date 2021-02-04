@@ -383,8 +383,6 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   UINT64 DdrSize = 0;
   UINT64 MemLimit;
   UINT32 i = 0;
-  RamPartitionEntry *RamPartitions = NULL;
-  UINT32 NumPartitions = 0;
   INT32 MemOfflineOffset;
   UINT64 *MemTable;
   INT32 PropLen;
@@ -394,15 +392,10 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
     goto Unsupported;
   }
 
-  Status = ReadRamPartitions (&RamPartitions, &NumPartitions);
+  Status = GetDdrSize (&DdrSize);
   if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Error returned from ReadRamPartitions %r\n", Status));
+    DEBUG ((EFI_D_ERROR, "Error getting DDR size %r\n", Status));
     return Status;
-  }
-
-  /* get DDR size by reading RAM parition table */
-  for (i = 0; i < NumPartitions; i++) {
-    DdrSize += RamPartitions[i].AvailableLength;
   }
 
   MemLimit = DdrSize;
