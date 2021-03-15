@@ -2,7 +2,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1009,7 +1009,8 @@ BootLinux (BootInfo *Info)
    */
   Status = UpdateCmdLine (BootParamlistPtr.CmdLine, FfbmStr, Recovery,
                    AlarmBoot, Info->VBCmdLine, &BootParamlistPtr.FinalCmdLine,
-                   Info->HeaderVersion);
+                   Info->HeaderVersion,
+                   (VOID *)BootParamlistPtr.DeviceTreeLoadAddr);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
     return Status;

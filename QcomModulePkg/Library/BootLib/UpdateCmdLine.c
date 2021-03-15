@@ -3,7 +3,7 @@
  * Copyright (c) 2009, Google Inc.
  * All rights reserved.
  *
- * Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -31,9 +31,11 @@
  *
  **/
 
+#include <Library/BaseLib.h>
 #include <Library/BootLinux.h>
 #include <Library/PartitionTableUpdate.h>
 #include <Library/PrintLib.h>
+#include <Library/FdtRw.h>
 #include <LinuxLoaderLib.h>
 #include <Protocol/EFICardInfo.h>
 #include <Protocol/EFIChargerEx.h>
@@ -79,6 +81,11 @@ STATIC CONST CHAR8 *AndroidBootFstabSuffix =
                                       " androidboot.fstab_suffix=";
 STATIC CHAR8 *FstabSuffixEmmc = "emmc";
 STATIC CHAR8 *FstabSuffixDefault = "default";
+
+/* Memory offline arguments */
+STATIC CHAR8 *MemOff = " mem=";
+STATIC CONST CHAR8 *MemHpState = " memhp_default_state=online";
+STATIC CONST CHAR8 *MovableNode = " movable_node";
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus)
@@ -371,6 +378,64 @@ GetSystemPath (CHAR8 **SysPath, BootInfo *Info)
 
 STATIC
 EFI_STATUS
+GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
+{
+  UINT64 DdrSize = 0;
+  UINT64 MemLimit;
+  UINT32 i = 0;
+  INT32 MemOfflineOffset;
+  UINT64 *MemTable;
+  INT32 PropLen;
+  EFI_STATUS Status;
+
+  if (IsLEVariant ()) {
+    goto Unsupported;
+  }
+
+  Status = GetDdrSize (&DdrSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Error getting DDR size %r\n", Status));
+    return Status;
+  }
+
+  MemLimit = DdrSize;
+  MemOfflineOffset = FdtPathOffset (fdt, "/mem-offline");
+
+  if (DdrSize < MEM_OFF_MIN ||
+      MemOfflineOffset < 0) {
+    goto Unsupported;
+  }
+
+  /* get table of offline sizes and subtract the size based off of DDR size */
+  MemTable = (UINT64 *)fdt_getprop_w (fdt, MemOfflineOffset, "offline-sizes",
+                                      &PropLen);
+  if (!MemTable ||
+       PropLen < 0) {
+    goto Unsupported;
+  }
+
+  if (DdrSize >= SwapBytes64 (MemTable[0])) {
+    for (i = (PropLen / sizeof (UINT64)) - 2; i >= 0; i -= 2) {
+      if (DdrSize >= SwapBytes64 (MemTable[i])) {
+        MemLimit -= SwapBytes64 (MemTable[i + 1]);
+        break;
+      }
+    }
+  }
+
+  MemLimit /= MB_SIZE;
+
+  AsciiSPrint (MemOffAmt, MEM_OFF_SIZE, "%dMB", MemLimit);
+
+  return EFI_SUCCESS;
+
+Unsupported:
+  DEBUG ((EFI_D_INFO, "Offlining Memory Not Supported\n"));
+  return EFI_UNSUPPORTED;
+}
+
+STATIC
+EFI_STATUS
 UpdateCmdLineParams (UpdateCmdLineParamList *Param,
                      CHAR8 **FinalCmdLine)
 {
@@ -525,6 +590,17 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     Param->LEVerityCmdLine = NULL;
   }
 
+  if (Param->MemOffAmt != NULL) {
+    Src = MemOff;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->MemOffAmt;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = MemHpState;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = MovableNode;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
+
   return EFI_SUCCESS;
 }
 
@@ -537,7 +613,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                CHAR8 **FinalCmdLine,
-               UINT32 HeaderVersion)
+               UINT32 HeaderVersion,
+               VOID *fdt)
 {
   EFI_STATUS Status;
   UINT32 CmdLineLen = 0;
@@ -558,6 +635,7 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   CHAR8 *LEVerityCmdLine = NULL;
   UINT32 LEVerityCmdLineLen = 0;
   CHAR8 RootDevStr[BOOT_DEV_NAME_SIZE_MAX];
+  CHAR8 MemOffAmt[MEM_OFF_SIZE];
 
   Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));
   if (Status != EFI_SUCCESS) {
@@ -709,6 +787,18 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   }
   CmdLineLen += AsciiStrLen (Param.FstabSuffix);
   Param.AndroidBootFstabSuffix = AndroidBootFstabSuffix;
+
+  Status = GetMemoryLimit (fdt, MemOffAmt);
+  if (Status == EFI_SUCCESS) {
+    CmdLineLen += AsciiStrLen (MemOff);
+    CmdLineLen += AsciiStrLen (MemOffAmt);
+    CmdLineLen += AsciiStrLen (MemHpState);
+    CmdLineLen += AsciiStrLen (MovableNode);
+
+    Param.MemOffAmt = MemOffAmt;
+  } else {
+    Param.MemOffAmt = NULL;
+  }
 
   /* 1 extra byte for NULL */
   CmdLineLen += 1;
