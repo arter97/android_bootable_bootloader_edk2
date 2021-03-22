@@ -24,7 +24,7 @@ MAKEPATH=$(ANDROID_TOP)/prebuilts/build-tools/linux-x86/bin/
   endif
 endif
 
-SECTOOLSV2_BIN=vendor/qcom/proprietary/sectools/Linux/sectools
+SECTOOLSV2_BIN=$(QCPATH)/sectools/Linux/sectools
 
 # Use host tools from prebuilts. Partner should determine the correct host tools to use
 PREBUILT_HOST_TOOLS := BUILD_CC=$(ANDROID_TOP)/$(CLANG)\ \
