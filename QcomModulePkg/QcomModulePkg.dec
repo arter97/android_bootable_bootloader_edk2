@@ -1,5 +1,5 @@
 #/*
-# * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -162,3 +162,4 @@
   gQcomTokenSpaceGuid.RamdiskEndAddress32|0x03C00000|UINT32|0x0001500A
   gQcomTokenSpaceGuid.EnableNewNodeSearchFuc|TRUE|BOOLEAN|0x0001500B
   gQcomTokenSpaceGuid.EnableMultiThreadFlash|TRUE|BOOLEAN|0x0001500C
+  gQcomTokenSpaceGuid.EnableDdrRegion|TRUE|BOOLEAN|0x0001500D
