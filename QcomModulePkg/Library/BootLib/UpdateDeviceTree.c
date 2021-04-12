@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -70,24 +70,6 @@ PrintSplashMemInfo (CONST CHAR8 *data, INT32 datalen)
 
   DEBUG ((EFI_D_VERBOSE, "reg = <0x%08x 0x%08x 0x%08x 0x%08x>\n", val[0],
           val[1], val[2], val[3]));
-}
-
-STATIC EFI_STATUS
-ValidateDdrRankChannel (struct ddr_details_entry_info *DdrInfo)
-{
-  if (DdrInfo->num_channels > MAX_CHANNELS) {
-    DEBUG ((EFI_D_ERROR, "ERROR: Number of channels is over the limit\n"));
-    return EFI_INVALID_PARAMETER;
-  }
-
-  for (UINT8 Chan = 0; Chan < DdrInfo->num_channels; Chan++) {
-    if (DdrInfo->num_ranks[Chan] > MAX_RANKS) {
-      DEBUG ((EFI_D_ERROR, "ERROR: Number of ranks is over the limit\n"));
-      return EFI_INVALID_PARAMETER;
-    }
-  }
-
-  return EFI_SUCCESS;
 }
 
 STATIC EFI_STATUS
@@ -696,8 +678,11 @@ UpdateDeviceTree (VOID *fdt,
   struct ddr_details_entry_info *DdrInfo;
   UINT64 Revision;
   EFI_STATUS Status;
+  EFI_RAMPARTITION_PROTOCOL *EfiRamPartProt;
+  UINT32 Hbb;
   UINT64 UpdateDTStartTime = GetTimerCountms ();
   UINT32 Index;
+
 
   /* Check the device tree header */
   ret = fdt_check_header (fdt) || fdt_check_header_ext (fdt);
@@ -759,8 +744,19 @@ UpdateDeviceTree (VOID *fdt,
               "ddr_device_rank, HBB not supported in Revision=0x%x\n",
               Revision));
     } else {
-      Status = ValidateDdrRankChannel (DdrInfo);
-      if (Status != EFI_SUCCESS) {
+      Status = gBS->LocateProtocol (&gEfiRamPartitionProtocolGuid, NULL,
+                      (VOID **)&EfiRamPartProt);
+
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR,
+                "Failed to get RamPartition Protocol: %d\n", Status));
+        goto OutofUpdateRankChannel;
+      }
+
+      Status = EfiRamPartProt->GetHighestBankBit (EfiRamPartProt, &Hbb);
+
+      if (EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_ERROR, "Failed to get Highest Bank Bit: %d\n", Status));
         goto OutofUpdateRankChannel;
       }
 
@@ -768,12 +764,11 @@ UpdateDeviceTree (VOID *fdt,
               DdrInfo->num_channels));
       for (UINT8 Chan = 0; Chan < DdrInfo->num_channels; Chan++) {
         DEBUG ((EFI_D_VERBOSE, "ddr_device_rank_ch%d:%d\n",
-                Chan, DdrInfo->num_ranks[Chan]));
+                Chan, DDR_MAX_RANKS));
         AsciiSPrint (FdtRankProp, sizeof (FdtRankProp),
                      "ddr_device_rank_ch%d", Chan);
         FdtPropUpdateFunc (fdt, offset, (CONST char *)FdtRankProp,
-                           (UINT32)DdrInfo->num_ranks[Chan],
-                           fdt_appendprop_u32, ret);
+                           DDR_MAX_RANKS, fdt_appendprop_u32, ret);
         if (ret) {
           DEBUG ((EFI_D_ERROR,
                   "ERROR: Cannot update memory node ddr_device_rank_ch%d:0x%x\n",
@@ -782,14 +777,13 @@ UpdateDeviceTree (VOID *fdt,
           DEBUG ((EFI_D_VERBOSE, "ddr_device_rank_ch%d added to memory node\n",
                   Chan));
         }
-        for (UINT8 Rank = 0; Rank < DdrInfo->num_ranks[Chan]; Rank++) {
+        for (UINT8 Rank = 0; Rank < DDR_MAX_RANKS; Rank++) {
           DEBUG ((EFI_D_VERBOSE, "ddr_device_hbb_ch%d_rank%d:%d\n",
-                  Chan, Rank, DdrInfo->hbb[Chan][Rank]));
+                  Chan, Rank, Hbb));
           AsciiSPrint (FdtHbbProp, sizeof (FdtHbbProp),
                        "ddr_device_hbb_ch%d_rank%d", Chan, Rank);
           FdtPropUpdateFunc (fdt, offset, (CONST char *)FdtHbbProp,
-                             (UINT32)DdrInfo->hbb[Chan][Rank],
-                             fdt_appendprop_u32, ret);
+                             Hbb, fdt_appendprop_u32, ret);
           if (ret) {
             DEBUG ((EFI_D_ERROR,
                     "ERROR: Cannot update memory node ddr_device_hbb_ch%d_rank%d:0x%x\n",
