@@ -1092,7 +1092,6 @@ BootLinux (BootInfo *Info)
     LinuxKernel32 (0, 0, (UINTN)BootParamlistPtr.DeviceTreeLoadAddr);
 
     // Should never reach here. After life support is not available
-    DEBUG ((EFI_D_ERROR, "After Life support not available\n"));
     goto Exit;
   }
 
