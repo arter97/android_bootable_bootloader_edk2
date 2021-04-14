@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -130,8 +130,6 @@ VOID DisableHypUartUsageForLogging (VOID)
 
   ArmSmcArgs.Arg0 = HYP_DISABLE_UART_LOGGING;
   ArmCallSmc (&ArmSmcArgs);
-  DEBUG ((EFI_D_VERBOSE, "returned Smc call to disable Uart logging from Hyp:"
-                         " 0x%x\n", ArmSmcArgs.Arg0));
 }
 
 EFI_STATUS
