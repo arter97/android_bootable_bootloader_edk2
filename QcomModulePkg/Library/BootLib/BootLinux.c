@@ -47,6 +47,7 @@
 #include "BootStats.h"
 #include "UpdateDeviceTree.h"
 #include "libfdt.h"
+#include "Bootconfig.h"
 #include <ufdt_overlay.h>
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
@@ -716,7 +717,18 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   EFI_STATUS Status;
   UINT64 RamdiskLoadAddr;
   UINT64 RamdiskEndAddr = 0;
+  UINT64 RamdiskLoadAddrCopy = 0;
   UINT32 TotalRamdiskSize;
+  UINT64 End = 0;
+  UINT32 VRamdiskSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
+    BootParamlistPtr->PageSize);
+  UINT32 VDtbSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
+    BootParamlistPtr->PageSize);
+  UINT32 VRamdiskTablesizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
+    BootParamlistPtr->PageSize);
 
   if (BootParamlistPtr == NULL) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
@@ -742,16 +754,7 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                          BootParamlistPtr->RamdiskOffset));
     return EFI_BAD_BUFFER_SIZE;
   }
-
-  Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
-                             BootParamlistPtr->FinalCmdLine,
-                             (VOID *)RamdiskLoadAddr, TotalRamdiskSize,
-                             BootParamlistPtr->BootingWith32BitKernel);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
-    return Status;
-  }
-
+  RamdiskLoadAddrCopy = RamdiskLoadAddr;
   /* If the boot-image version is greater than 2, place the vendor-ramdisk
    * first in the memory, and then place ramdisk.
    * This concatination would result in an overlay for .gzip and .cpio formats.
@@ -776,9 +779,11 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   }
 
   gBS->CopyMem ((CHAR8 *)RamdiskLoadAddr,
-                BootParamlistPtr->ImageBuffer +
-                BootParamlistPtr->RamdiskOffset,
-                BootParamlistPtr->RamdiskSize);
+    BootParamlistPtr->ImageBuffer+
+    BootParamlistPtr->RamdiskOffset,
+    BootParamlistPtr->RamdiskSize);
+  DEBUG ((EFI_D_INFO, "Ramdiskaddr start %x \n ", RamdiskLoadAddr));
+  RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
     if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
@@ -796,6 +801,35 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                   BootParamlistPtr->ImageBuffer +
                   BootParamlistPtr->PageSize,
                   BootParamlistPtr->KernelSizeActual);
+  }
+
+
+  if ((Info->HeaderVersion > BOOT_HEADER_VERSION_THREE) &&
+    (BootParamlistPtr->VendorBootconfigSize)) {
+
+    UINT64 *BootconfigAddr = (BootParamlistPtr->VendorImageBuffer+
+        BootParamlistPtr->PageSize+
+        VRamdiskSizePageAligned+
+        VDtbSizePageAligned+
+        VRamdiskTablesizePageAligned);
+
+    gBS->CopyMem ((CHAR8 *)RamdiskLoadAddr,
+      BootconfigAddr,
+      BootParamlistPtr->VendorBootconfigSize);
+
+    End =  AddBootconfigParameters ("\n", 2, RamdiskLoadAddr,
+        BootParamlistPtr->VendorBootconfigSize);
+    BootParamlistPtr->VendorBootconfigSize = (End - RamdiskLoadAddr);
+    TotalRamdiskSize += BootParamlistPtr->VendorBootconfigSize;
+  }
+
+  Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
+                             BootParamlistPtr->FinalCmdLine,
+                             (VOID *)RamdiskLoadAddrCopy, TotalRamdiskSize,
+                             BootParamlistPtr->BootingWith32BitKernel);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
+    return Status;
   }
 
   return EFI_SUCCESS;
@@ -949,6 +983,11 @@ UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
     BootParamlistPtr->VendorRamdiskSize =
     VendorBootImgHdrV4->vendor_ramdisk_size;
     BootParamlistPtr->PageSize = VendorBootImgHdrV4->page_size;
+    BootParamlistPtr->DtSize = VendorBootImgHdrV4->dtb_size;
+    BootParamlistPtr->VendorRamdiskTableSize =
+      VendorBootImgHdrV4->VendorRamdiskTableSize;
+    BootParamlistPtr->VendorBootconfigSize =
+      VendorBootImgHdrV4->VendorBootconfigSize;
     BootParamlistPtr->SecondSize = 0;
   }
 
@@ -975,6 +1014,8 @@ BootLinux (BootInfo *Info)
   LINUX_KERNEL32 LinuxKernel32;
   UINT32 RamdiskSizeActual = 0;
   UINT32 SecondSizeActual = 0;
+  UINT64 KernelSizeReserved = 0;
+  UINTN DataSize;
 
   /*Boot Image header information variables*/
   CHAR8 FfbmStr[FFBM_MODE_BUF_SIZE] = {'\0'};
@@ -1162,6 +1203,15 @@ BootLinux (BootInfo *Info)
   StackBase = KernIntf->Thread->ThreadGetUnsafeSPBase (ThreadNum);
   StackCurrent = KernIntf->Thread->ThreadGetUnsafeSPCurrent (ThreadNum);
 
+  DataSize = sizeof (KernelSizeReserved);
+  Status = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
+                               NULL, &DataSize, &KernelSizeReserved);
+
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_INFO, "Failed to get size of kernel region\n"));
+    return Status;
+  }
+
   DEBUG ((EFI_D_INFO, "\nShutting Down UEFI Boot Services: %lu ms\n",
           GetTimerCountms ()));
   /*Shut down UEFI boot services*/
@@ -1174,7 +1224,7 @@ BootLinux (BootInfo *Info)
   }
 
   PreparePlatformHardware (KernIntf, (VOID *)BootParamlistPtr.KernelLoadAddr,
-                  (UINTN)BootParamlistPtr.KernelSizeActual,
+                  (UINTN)KernelSizeReserved,
                   (VOID *)BootParamlistPtr.RamdiskLoadAddr,
                   (UINTN)RamdiskSizeActual,
                   (VOID *)BootParamlistPtr.DeviceTreeLoadAddr, DT_SIZE_2MB,
