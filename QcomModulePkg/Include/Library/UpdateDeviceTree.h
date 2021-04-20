@@ -85,6 +85,11 @@ struct DisplayDemuraInfoType {
 };
 #pragma pack(pop)
 
+#define DDR_REGIONS_MASK 32
+#define DDR_REGIONS_LOW_MASK 0xffffffff
+#define DDR_REGION_NAME_LEN 8
+#define DDR_REGION_NAME_SUFFIX 2
+
 INT32
 dev_tree_add_mem_info (VOID *fdt, UINT32 offset, UINT32 addr, UINT32 size);
 
