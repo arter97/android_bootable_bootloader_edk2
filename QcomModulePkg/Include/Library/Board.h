@@ -46,7 +46,7 @@
 #define CHIP_BASE_BAND_APQ "apq"
 #define CHIP_BASE_BAND_MDM "mdm"
 
-#define BIT(x) (1UL << x)
+#define BIT(x) (1ULL << x)
 
 extern RamPartitionEntry *RamPartitionEntries;
 

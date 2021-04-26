@@ -24,6 +24,8 @@ MAKEPATH=$(ANDROID_TOP)/prebuilts/build-tools/linux-x86/bin/
   endif
 endif
 
+SECTOOLSV2_BIN=$(QCPATH)/sectools/Linux/sectools
+
 # Use host tools from prebuilts. Partner should determine the correct host tools to use
 PREBUILT_HOST_TOOLS := BUILD_CC=$(ANDROID_TOP)/$(CLANG)\ \
 		       BUILD_CXX=$(ANDROID_TOP)/$(CLANG_CXX)\ \
@@ -97,7 +99,7 @@ else
         VIRTUAL_AB_OTA := VIRTUAL_AB_OTA=0
 endif
 
-ifeq ($(BOARD_USES_RECOVERY_AS_BOOT),true)
+ifneq (,$(filter true,$(BOARD_USES_RECOVERY_AS_BOOT) $(BOARD_MOVE_RECOVERY_RESOURCES_TO_VENDOR_BOOT)))
 	BUILD_USES_RECOVERY_AS_BOOT := BUILD_USES_RECOVERY_AS_BOOT=1
 else
 	BUILD_USES_RECOVERY_AS_BOOT := BUILD_USES_RECOVERY_AS_BOOT=0
@@ -133,7 +135,7 @@ ifeq ($(BOARD_ABL_SIMPLE),true)
 endif
 
 # ABL ELF output
-TARGET_ABL := $(PRODUCT_OUT)/abl.elf
+TARGET_ABL := $(PRODUCT_OUT)/unsigned_abl.elf
 TARGET_EMMC_BOOTLOADER := $(TARGET_ABL)
 ABL_OUT := $(TARGET_OUT_INTERMEDIATES)/ABL_OBJ
 
@@ -169,3 +171,22 @@ $(TARGET_ABL): $(LOCAL_ABL_SRC_FILE) | $(ABL_OUT) $(INSTALLED_KEYSTOREIMAGE_TARG
 		CLANG_GCC_TOOLCHAIN=$(CLANG35_GCC_TOOLCHAIN)\
 		TARGET_ARCHITECTURE=$(TARGET_ARCHITECTURE) \
 		BOARD_BOOTLOADER_PRODUCT_NAME=$(BOARD_BOOTLOADER_PRODUCT_NAME)
+
+
+define sec-image-generate
+	@echo "Generating signed appsbl using secimagev2 tool"
+	@rm -rf $(PRODUCT_OUT)/temp_signed_abl
+	( $(SECTOOLSV2_BIN) secure-image $(TARGET_EMMC_BOOTLOADER) \
+		--outfile $(PRODUCT_OUT)/abl.elf \
+		--image-id ABL \
+		--security-profile $(SECTOOLS_SECURITY_PROFILE) \
+		--sign \
+		--signing-mode TEST \
+		> $(PRODUCT_OUT)/secimage.log 2>&1 )
+	@echo "Completed secimagev2 signed appsbl (ABL) (logs in $(PRODUCT_OUT)/secimage.log)"
+endef
+
+
+SIGN_ABL := $(PRODUCT_OUT)/temp_signed_abl
+$(SIGN_ABL): $(TARGET_EMMC_BOOTLOADER)
+	$(call sec-image-generate)

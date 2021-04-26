@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -364,6 +364,7 @@ GetFfbmCommand (CHAR8 *FfbmString, UINT32 Sz)
 {
   CONST CHAR8 *FfbmCmd = "ffbm-";
   CONST CHAR8 *QmmiCmd = "qmmi";
+  CONST CHAR8 *Ffbm02Cmd = "ffbm-02";
   CHAR8 *FfbmData = NULL;
   EFI_STATUS Status;
   EFI_GUID Ptype = gEfiMiscPartitionGuid;
@@ -384,10 +385,13 @@ GetFfbmCommand (CHAR8 *FfbmString, UINT32 Sz)
   }
 
   FfbmData[Sz - 1] = '\0';
-  if (!AsciiStrnCmp (FfbmData, FfbmCmd, AsciiStrLen (FfbmCmd))) {
+  if (!AsciiStrnCmp (FfbmData, QmmiCmd, AsciiStrLen (QmmiCmd))||
+    !AsciiStrnCmp (FfbmData, Ffbm02Cmd, AsciiStrLen (Ffbm02Cmd))) {
+    /* if ffbm-02 or qmmi string is in misc partition,
+       then write qmmi to kernel cmd line */
+    AsciiStrnCpyS (FfbmString, Sz, QmmiCmd, AsciiStrLen (QmmiCmd));
+  } else if (!AsciiStrnCmp (FfbmData, FfbmCmd, AsciiStrLen (FfbmCmd))) {
     AsciiStrnCpyS (FfbmString, Sz, FfbmData, Sz);
-  } else if (!AsciiStrnCmp (FfbmData, QmmiCmd, AsciiStrLen (QmmiCmd))) {
-    AsciiStrnCpyS (FfbmString, Sz, FfbmData, AsciiStrLen (QmmiCmd));
   } else {
     Status = EFI_NOT_FOUND;
   }
