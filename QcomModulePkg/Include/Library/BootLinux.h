@@ -189,8 +189,10 @@ typedef struct BootLinuxParamlist {
 
   //Kernel size rounded off based on the page size
   UINT32 KernelSizeActual;
+  UINT32 FinalBootConfigLen;
 
   CHAR8 *FinalCmdLine;
+  CHAR8 *FinalBootConfig;
   CHAR8 *CmdLine;
   BOOLEAN BootingWith32BitKernel;
   BOOLEAN BootingWithPatchedKernel;

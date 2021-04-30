@@ -90,6 +90,13 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *MemOffAmt;
 } UpdateCmdLineParamList;
 
+
+typedef struct BootConfigParamNode {
+  CHAR8 *param;
+  UINT32 ParamLen;
+  LIST_ENTRY ListNode;
+} BootConfigParamNode;
+
 EFI_STATUS
 UpdateCmdLine (CONST CHAR8 *CmdLine,
                CHAR8 *FfbmStr,
@@ -97,6 +104,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
                BOOLEAN AlarmBoot,
                CONST CHAR8 *VBCmdLine,
                CHAR8 **FinalCmdLine,
+               CHAR8 **FinalBootConfig,
+               UINT32 *FinalBootConfigLen,
                UINT32 HeaderVersion,
                VOID *fdt);
 BOOLEAN
@@ -107,4 +116,15 @@ GetSystemPath (CHAR8 **SysPath, BootInfo *Info);
 
 EFI_STATUS
 TargetPauseForBatteryCharge (BOOLEAN *BatteryStatus);
+BOOLEAN IsAndroidBootParam (CONST CHAR8 *param,
+                            UINT32 ParamLen,
+                            UINT32 HeaderVersion);
+
+VOID
+AddtoBootConfigList (BOOLEAN BootConfigFlag,
+                CONST CHAR8 *ParamKey,
+                CONST CHAR8 *ParamValue,
+                LIST_ENTRY *list,
+                UINT32 ParamKeyLen,
+                UINT32 ParamValueLen);
 #endif
