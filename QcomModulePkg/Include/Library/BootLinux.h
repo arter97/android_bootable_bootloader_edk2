@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -155,6 +155,10 @@ typedef struct BootLinuxParamlist {
   VOID *VendorImageBuffer;
   UINT64 VendorImageSize;
 
+  // Valid only with recovery ramdisk
+  VOID *RecoveryImageBuffer;
+  UINT64 RecoveryImageSize;
+
   /* Load addresses for kernel, ramdisk, dt
    * These addresses are either predefined or get from UEFI core */
   UINT64 KernelLoadAddr;
@@ -177,6 +181,9 @@ typedef struct BootLinuxParamlist {
   // Valid only for boot image header version greater than 2
   UINT32 VendorRamdiskSize;
 
+  // Valid only with recovery ramdisk; get from recovery image header
+  UINT32 RecoveryRamdiskSize;
+
   //Kernel size rounded off based on the page size
   UINT32 KernelSizeActual;
 
@@ -196,7 +203,8 @@ CheckImageHeader (VOID *ImageHdrBuffer,
                   UINT32 VendorImageHdrSize,
                   UINT32 *ImageSizeActual,
                   UINT32 *PageSize,
-                  BOOLEAN BootIntoRecovery);
+                  BOOLEAN BootIntoRecovery,
+                  VOID *RecoveryImageHdrBuffer);
 EFI_STATUS
 LoadImageHeader (CHAR16 *Pname, VOID **ImageHdrBuffer, UINT32 *ImageHdrSize);
 EFI_STATUS
@@ -208,6 +216,8 @@ BOOLEAN TargetBuildVariantUser (VOID);
 BOOLEAN IsLEVariant (VOID);
 BOOLEAN IsBuildAsSystemRootImage (VOID);
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID);
+VOID SetRecoveryHasNoKernel (VOID);
+BOOLEAN IsRecoveryHasNoKernel (VOID);
 EFI_STATUS
 GetImage (CONST BootInfo *Info,
           VOID **ImageBuffer,
