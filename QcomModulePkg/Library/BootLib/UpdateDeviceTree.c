@@ -1040,21 +1040,24 @@ OutofUpdateRankChannel:
     }
   }
 
-  for (Index = 0; Index < NUM_RNG_SEED_WORDS / sizeof (UINT64); Index++) {
-    Status = GetRandomSeed (&RandomSeed);
-    if (Status == EFI_SUCCESS) {
+  if (!IsLEVariant ()) {
+    for (Index = 0; Index < NUM_RNG_SEED_WORDS / sizeof (UINT64); Index++) {
+      Status = GetRandomSeed (&RandomSeed);
+      if (Status == EFI_SUCCESS) {
 
-      /* Adding the RNG seed to the chosen node */
-      FdtPropUpdateFunc (fdt, offset, (CONST CHAR8 *)"rng-seed",
-                        (UINT64)RandomSeed, fdt_appendprop_u64, ret);
-      if (ret) {
-        DEBUG ((EFI_D_ERROR,
-              "ERROR: Cannot update chosen node [rng-seed] - 0x%x\n", ret));
+        /* Adding the RNG seed to the chosen node */
+        FdtPropUpdateFunc (fdt, offset, (CONST CHAR8 *)"rng-seed",
+                          (UINT64)RandomSeed, fdt_appendprop_u64, ret);
+        if (ret) {
+          DEBUG ((EFI_D_ERROR,
+                "ERROR: Cannot update chosen node [rng-seed] - 0x%x\n", ret));
+          break;
+        }
+      } else {
+        DEBUG ((EFI_D_INFO, "ERROR: Cannot generate Random Seed - %r\n",
+                                Status));
         break;
       }
-    } else {
-      DEBUG ((EFI_D_INFO, "ERROR: Cannot generate Random Seed - %r\n", Status));
-      break;
     }
   }
 
@@ -1113,19 +1116,21 @@ OutofUpdateRankChannel:
     }
   }
 
-  /* Update DDR regions info */
-  if (FixedPcdGetBool (EnableDdrRegion)) {
-    DEBUG ((EFI_D_VERBOSE, "Start DT ddr regions update: %lu ms\n",
-                        GetTimerCountms ()));
-    Status =  AddDDrRegion (fdt);
-    if (Status != EFI_SUCCESS &&
-        Status != EFI_UNSUPPORTED) {
-      DEBUG ((EFI_D_ERROR,
-              "Failed to update DDR regions info, Status=%r\n", Status));
-      return Status;
+  if (!IsLEVariant ()) {
+    /* Update DDR regions info */
+    if (FixedPcdGetBool (EnableDdrRegion)) {
+      DEBUG ((EFI_D_VERBOSE, "Start DT ddr regions update: %lu ms\n",
+                          GetTimerCountms ()));
+      Status =  AddDDrRegion (fdt);
+      if (Status != EFI_SUCCESS &&
+          Status != EFI_UNSUPPORTED) {
+        DEBUG ((EFI_D_ERROR,
+                "Failed to update DDR regions info, Status=%r\n", Status));
+        return Status;
+      }
+      DEBUG ((EFI_D_VERBOSE, "End DT ddr regions update: %lu ms\n",
+                           GetTimerCountms ()));
     }
-    DEBUG ((EFI_D_VERBOSE, "End DT ddr regions update: %lu ms\n",
-                         GetTimerCountms ()));
   }
 
   fdt_pack (fdt);
