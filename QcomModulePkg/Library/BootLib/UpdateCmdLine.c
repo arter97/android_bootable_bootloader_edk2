@@ -479,17 +479,22 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
   }
 
   if (Param->VBCmdLine != NULL) {
-    Src = Param->VBCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    BootConfigFlag = IsAndroidBootParam (Param->VBCmdLine,
-                            AsciiStrLen (Param->VBCmdLine),
-                                     Param->HeaderVersion);
-    ParseVBCmdLine ((CHAR8*) Param->VBCmdLine, AsciiStrLen (Param->VBCmdLine));
-    AddtoBootConfigList (BootConfigFlag, Param->VBCmdLine, NULL,
-                BootConfigListHead, AsciiStrLen (Param->VBCmdLine), 0);
+    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+        Src = Param->VBCmdLine;
+        AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    } else {
+        BootConfigFlag = IsAndroidBootParam (Param->VBCmdLine,
+                              AsciiStrLen (Param->VBCmdLine),
+                                       Param->HeaderVersion);
+      ParseVBCmdLine ((CHAR8*) Param->VBCmdLine,
+                 AsciiStrLen (Param->VBCmdLine));
+      AddtoBootConfigList (BootConfigFlag, Param->VBCmdLine, NULL,
+                  BootConfigListHead, AsciiStrLen (Param->VBCmdLine), 0);
+    }
   }
 
-  if (Param->BootDevBuf) {
+  if ((Param->BootDevBuf) &&
+      (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE)) {
     Src = Param->BootDeviceCmdLine;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
@@ -515,42 +520,51 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     Param->BootDevBuf = NULL;
   }
 
-  Src = Param->UsbSerialCmdLine;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-  Src = Param->StrSerialNum;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-
+  if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+    Src = Param->UsbSerialCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->StrSerialNum;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
   if (Param->FfbmStr &&
       (Param->FfbmStr[0] != '\0')) {
-    Src = Param->AndroidBootMode;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+      Src = Param->AndroidBootMode;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
-    Src = Param->FfbmStr;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      Src = Param->FfbmStr;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    }
 
     Src = Param->LogLevel;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   } else if (Param->PauseAtBootUp) {
-    Src = Param->BatteryChgPause;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+        Src = Param->BatteryChgPause;
+        AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      }
   } else if (Param->AlarmBoot) {
-    Src = Param->AlarmBootCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+        Src = Param->AlarmBootCmdLine;
+        AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      }
   }
 
-  Src = BOOT_BASE_BAND;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+    Src = BOOT_BASE_BAND;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
-  gBS->SetMem (Param->ChipBaseBand, CHIP_BASE_BAND_LEN, 0);
-  AsciiStrnCpyS (Param->ChipBaseBand, CHIP_BASE_BAND_LEN,
+    gBS->SetMem (Param->ChipBaseBand, CHIP_BASE_BAND_LEN, 0);
+    AsciiStrnCpyS (Param->ChipBaseBand, CHIP_BASE_BAND_LEN,
                  BoardPlatformChipBaseBand (),
                  (CHIP_BASE_BAND_LEN - 1));
-  ToLower (Param->ChipBaseBand);
-  Src = Param->ChipBaseBand;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    ToLower (Param->ChipBaseBand);
+    Src = Param->ChipBaseBand;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
-  Src = Param->DisplayCmdLine;
-  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    Src = Param->DisplayCmdLine;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  }
 
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
@@ -590,12 +604,14 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
    }
 
-  if (Param->DtboIdxStr != NULL) {
+  if ((Param->DtboIdxStr != NULL) &&
+       (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE)) {
     Src = Param->DtboIdxStr;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if (Param->DtbIdxStr != NULL) {
+  if ((Param->DtbIdxStr != NULL) &&
+       (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE)) {
     Src = Param->DtbIdxStr;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
@@ -606,8 +622,10 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
       !Param->Recovery) ||
       (!Param->MultiSlotBoot &&
        !IsBuildUseRecoveryAsBoot ())) {
-    Src = AndroidBootForceNormalBoot;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+      Src = AndroidBootForceNormalBoot;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    }
   }
 
   if (Param->LEVerityCmdLine != NULL) {

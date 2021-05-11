@@ -782,7 +782,6 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
     BootParamlistPtr->ImageBuffer+
     BootParamlistPtr->RamdiskOffset,
     BootParamlistPtr->RamdiskSize);
-  DEBUG ((EFI_D_INFO, "Ramdiskaddr start %x \n ", RamdiskLoadAddr));
   RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
@@ -832,9 +831,7 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
       DEBUG ((EFI_D_INFO, "Failed to load Bootconfig \n"));
     } else {
       BootParamlistPtr->VendorBootconfigSize = (End - RamdiskLoadAddr);
-      DEBUG ((EFI_D_INFO, "total ramdisk = %ld\n", TotalRamdiskSize));
       TotalRamdiskSize += BootParamlistPtr->VendorBootconfigSize;
-      DEBUG ((EFI_D_INFO, "total ramdisk updated = %ld", TotalRamdiskSize));
     }
   }
   Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
