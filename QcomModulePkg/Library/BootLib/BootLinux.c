@@ -408,6 +408,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   UINT32 NumRecoveryDtboPages;
   VOID* ImageBuffer = NULL;
   UINT32 ImageSize = 0;
+  CHAR8 *TempHypBootInfo[HYP_MAX_NUM_DTBOS];
 
   if (Info == NULL ||
       BootParamlistPtr == NULL) {
@@ -558,11 +559,27 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
           continue;
         }
 
+        /* Allocate buffer temporarily */
+        TempHypBootInfo[i] = AllocateZeroPool (fdt_totalsize
+                                      (BootParamlistPtr->HypDtboBaseAddr[i]));
+
+        if (!TempHypBootInfo[i]) {
+          DEBUG ((EFI_D_ERROR,
+                 "Failed to allocate memory for HypDtbo %d\n", i));
+          return EFI_OUT_OF_RESOURCES;
+        }
+
+        /* Copy content from Hyp provided memory to temp buffer */
+        gBS->CopyMem ((VOID *)TempHypBootInfo[i],
+                      (VOID *)BootParamlistPtr->HypDtboBaseAddr[i],
+                      fdt_totalsize (BootParamlistPtr->HypDtboBaseAddr[i]));
+
         if (!AppendToDtList (&DtsList,
-                       (fdt64_t)BootParamlistPtr->HypDtboBaseAddr[i],
+                       (fdt64_t)TempHypBootInfo[i],
                        fdt_totalsize (BootParamlistPtr->HypDtboBaseAddr[i]))) {
           DEBUG ((EFI_D_ERROR,
                   "Unable to Allocate buffer for HypOverlay DT num: %d\n", i));
+          FreePool ((VOID *)TempHypBootInfo[i]);
           DeleteDtList (&DtsList);
           return EFI_OUT_OF_RESOURCES;
         }
