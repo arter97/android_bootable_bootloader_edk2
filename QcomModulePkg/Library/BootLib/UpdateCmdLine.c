@@ -573,7 +573,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
-  if ((IsBuildUseRecoveryAsBoot () &&
+  if (((IsBuildUseRecoveryAsBoot () ||
+      IsRecoveryHasNoKernel ()) &&
       IsDynamicPartitionSupport () &&
       !Param->Recovery) ||
       (!Param->MultiSlotBoot &&
@@ -769,7 +770,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
     }
   }
 
-  if ((IsBuildUseRecoveryAsBoot () &&
+  if (((IsBuildUseRecoveryAsBoot () ||
+      IsRecoveryHasNoKernel ()) &&
       IsDynamicPartitionSupport () &&
       !Recovery) ||
       (!MultiSlotBoot &&
@@ -789,7 +791,9 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   Param.AndroidBootFstabSuffix = AndroidBootFstabSuffix;
 
   Status = GetMemoryLimit (fdt, MemOffAmt);
-  if (Status == EFI_SUCCESS) {
+  /* Don't override "mem" argument if coded into boot image */
+  if (Status == EFI_SUCCESS &&
+      !AsciiStrStr (CmdLine, "mem=")) {
     CmdLineLen += AsciiStrLen (MemOff);
     CmdLineLen += AsciiStrLen (MemOffAmt);
     CmdLineLen += AsciiStrLen (MemHpState);

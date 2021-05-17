@@ -51,6 +51,7 @@
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
+STATIC BOOLEAN RecoveryHasNoKernel = FALSE;
 
 /* To set load addresses, callers should make sure to initialize the
  * BootParamlistPtr before calling this function */
@@ -161,7 +162,8 @@ UpdateBootParams (BootParamlist *BootParamlistPtr)
   BootParamlistPtr->RamdiskLoadAddr = (BootParamlistPtr->KernelEndAddr -
                             (LOCAL_ROUND_TO_PAGE (
                                           BootParamlistPtr->RamdiskSize +
-                                          BootParamlistPtr->VendorRamdiskSize,
+                                          BootParamlistPtr->VendorRamdiskSize +
+                                          BootParamlistPtr->RecoveryRamdiskSize,
                              BootParamlistPtr->PageSize) +
                              BootParamlistPtr->PageSize));
   BootParamlistPtr->DeviceTreeLoadAddr = (BootParamlistPtr->RamdiskLoadAddr -
@@ -408,6 +410,7 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
   UINT32 NumRecoveryDtboPages;
   VOID* ImageBuffer = NULL;
   UINT32 ImageSize = 0;
+  CHAR8 *TempHypBootInfo[HYP_MAX_NUM_DTBOS];
 
   if (Info == NULL ||
       BootParamlistPtr == NULL) {
@@ -558,11 +561,27 @@ DTBImgCheckAndAppendDT (BootInfo *Info, BootParamlist *BootParamlistPtr)
           continue;
         }
 
+        /* Allocate buffer temporarily */
+        TempHypBootInfo[i] = AllocateZeroPool (fdt_totalsize
+                                      (BootParamlistPtr->HypDtboBaseAddr[i]));
+
+        if (!TempHypBootInfo[i]) {
+          DEBUG ((EFI_D_ERROR,
+                 "Failed to allocate memory for HypDtbo %d\n", i));
+          return EFI_OUT_OF_RESOURCES;
+        }
+
+        /* Copy content from Hyp provided memory to temp buffer */
+        gBS->CopyMem ((VOID *)TempHypBootInfo[i],
+                      (VOID *)BootParamlistPtr->HypDtboBaseAddr[i],
+                      fdt_totalsize (BootParamlistPtr->HypDtboBaseAddr[i]));
+
         if (!AppendToDtList (&DtsList,
-                       (fdt64_t)BootParamlistPtr->HypDtboBaseAddr[i],
+                       (fdt64_t)TempHypBootInfo[i],
                        fdt_totalsize (BootParamlistPtr->HypDtboBaseAddr[i]))) {
           DEBUG ((EFI_D_ERROR,
                   "Unable to Allocate buffer for HypOverlay DT num: %d\n", i));
+          FreePool ((VOID *)TempHypBootInfo[i]);
           DeleteDtList (&DtsList);
           return EFI_OUT_OF_RESOURCES;
         }
@@ -707,7 +726,8 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   RamdiskLoadAddr = BootParamlistPtr->RamdiskLoadAddr;
 
   TotalRamdiskSize = BootParamlistPtr->RamdiskSize +
-                            BootParamlistPtr->VendorRamdiskSize;
+                            BootParamlistPtr->VendorRamdiskSize +
+                            BootParamlistPtr->RecoveryRamdiskSize;
 
   if (RamdiskEndAddr - RamdiskLoadAddr < TotalRamdiskSize) {
     DEBUG ((EFI_D_ERROR, "Error: Ramdisk size is over the limit\n"));
@@ -743,6 +763,16 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                   BootParamlistPtr->VendorRamdiskSize);
 
     RamdiskLoadAddr += BootParamlistPtr->VendorRamdiskSize;
+
+    if (Info->BootIntoRecovery &&
+        IsRecoveryHasNoKernel () &&
+        BootParamlistPtr->RecoveryRamdiskSize) {
+      gBS->CopyMem ((VOID *)RamdiskLoadAddr,
+                    BootParamlistPtr->RecoveryImageBuffer +
+                    BootParamlistPtr->PageSize,
+                    BootParamlistPtr->RecoveryRamdiskSize);
+      RamdiskLoadAddr += BootParamlistPtr->RecoveryRamdiskSize;
+    }
   }
 
   gBS->CopyMem ((CHAR8 *)RamdiskLoadAddr,
@@ -803,8 +833,10 @@ UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   UINTN VendorBootImgSize;
+  UINTN RecoveryBootImgSize;
   boot_img_hdr_v3 *BootImgHdrV3;
   vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
+  boot_img_hdr_v3 *RecoveryBootImgHdrV3;
 
   if (Info->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
     BootParamlistPtr->KernelSize =
@@ -830,6 +862,27 @@ UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
     DEBUG ((EFI_D_ERROR,
     "UpdateBootParamsSizeAndCmdLine: Failed to find vendor_boot image\n"));
     return Status;
+  }
+
+  if (Info->BootIntoRecovery &&
+    IsRecoveryHasNoKernel ()) {
+    Status = GetImage (Info, (VOID **)&RecoveryBootImgHdrV3,
+                       &RecoveryBootImgSize, "recovery");
+
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR,
+        "UpdateBootParamsSizeAndCmdLine: Failed to find recovery image\n"));
+        return Status;
+      }
+
+      BootParamlistPtr->RecoveryImageBuffer = RecoveryBootImgHdrV3;
+      BootParamlistPtr->RecoveryImageSize = RecoveryBootImgSize;
+      BootParamlistPtr->RecoveryRamdiskSize =
+                        RecoveryBootImgHdrV3->ramdisk_size;
+  } else {
+    BootParamlistPtr->RecoveryImageBuffer = NULL;
+    BootParamlistPtr->RecoveryImageSize = 0;
+    BootParamlistPtr->RecoveryRamdiskSize = 0;
   }
 
   BootParamlistPtr->VendorImageBuffer = VendorBootImgHdrV3;
@@ -908,7 +961,8 @@ BootLinux (BootInfo *Info)
                      ((!Info->MultiSlotBoot ||
                         IsDynamicPartitionSupport ()) &&
                         (Recovery &&
-                        !IsBuildUseRecoveryAsBoot ()))?
+                        !IsBuildUseRecoveryAsBoot () &&
+                        !IsRecoveryHasNoKernel ()))?
                         "recovery" : "boot");
   if (Status != EFI_SUCCESS ||
       BootParamlistPtr.ImageBuffer == NULL ||
@@ -916,7 +970,8 @@ BootLinux (BootInfo *Info)
     DEBUG ((EFI_D_ERROR, "BootLinux: Get%aImage failed!\n",
             (!Info->MultiSlotBoot &&
              (Recovery &&
-             !IsBuildUseRecoveryAsBoot ()))? "Recovery" : "Boot"));
+             !IsBuildUseRecoveryAsBoot () &&
+             !IsRecoveryHasNoKernel ()))? "Recovery" : "Boot"));
     return EFI_NOT_STARTED;
   }
   /* Find if MDTP is enabled and Active */
@@ -1129,18 +1184,21 @@ CheckImageHeader (VOID *ImageHdrBuffer,
                   UINT32 VendorImageHdrSize,
                   UINT32 *ImageSizeActual,
                   UINT32 *PageSize,
-                  BOOLEAN BootIntoRecovery)
+                  BOOLEAN BootIntoRecovery,
+                  VOID *RecoveryHdrBuffer)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
   struct boot_img_hdr_v2 *BootImgHdrV2;
   boot_img_hdr_v3 *BootImgHdrV3;
   vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
+  boot_img_hdr_v3 *RecoveryImgHdrV3 = NULL;
 
   UINT32 KernelSizeActual = 0;
   UINT32 DtSizeActual = 0;
   UINT32 RamdiskSizeActual = 0;
   UINT32 VendorRamdiskSizeActual = 0;
+  UINT32 RecoveryRamdiskSizeActual = 0;
 
   // Boot Image header information variables
   UINT32 HeaderVersion = 0;
@@ -1150,6 +1208,7 @@ CheckImageHeader (VOID *ImageHdrBuffer,
   UINT32 SecondSize = 0;
   UINT32 DtSize = 0;
   UINT32 tempImgSize = 0;
+  UINT32 RecoveryRamdiskSize = 0;
 
   if (CompareMem ((VOID *)((boot_img_hdr *)(ImageHdrBuffer))->magic, BOOT_MAGIC,
                   BOOT_MAGIC_SIZE)) {
@@ -1164,7 +1223,8 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     SecondSize = ((boot_img_hdr *)(ImageHdrBuffer))->second_size;
     *PageSize = ((boot_img_hdr *)(ImageHdrBuffer))->page_size;
   } else {
-    if (CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
+    if (!VendorImageHdrBuffer ||
+        CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
                      (VendorImageHdrBuffer))->magic,
                      VENDOR_BOOT_MAGIC, VENDOR_BOOT_MAGIC_SIZE)) {
       DEBUG ((EFI_D_ERROR, "Invalid vendor_boot image header\n"));
@@ -1193,6 +1253,19 @@ CheckImageHeader (VOID *ImageHdrBuffer,
       DEBUG ((EFI_D_ERROR, "Integer Overflow: Vendor Ramdisk Size = %u\n",
               RamdiskSize));
       return EFI_BAD_BUFFER_SIZE;
+    }
+
+    if (BootIntoRecovery &&
+        RecoveryHdrBuffer) {
+      RecoveryImgHdrV3 = RecoveryHdrBuffer;
+      RecoveryRamdiskSize = RecoveryImgHdrV3->ramdisk_size;
+      RecoveryRamdiskSizeActual = ROUND_TO_PAGE (RecoveryRamdiskSize,
+                      *PageSize - 1);
+      if (RecoveryRamdiskSize &&
+          !RecoveryRamdiskSizeActual) {
+        DEBUG ((EFI_D_ERROR, "Integer Overflow checking Recovery Ramdisk\n"));
+        return EFI_BAD_BUFFER_SIZE;
+      }
     }
   }
 
@@ -1351,6 +1424,11 @@ CheckImageHeader (VOID *ImageHdrBuffer,
   if (HeaderVersion >= BOOT_HEADER_VERSION_THREE) {
     DEBUG ((EFI_D_VERBOSE, "Vendor Ramdisk Size      : 0x%x\n",
             VendorRamdiskSize));
+    if (BootIntoRecovery &&
+        RecoveryImgHdrV3) {
+      DEBUG ((EFI_D_VERBOSE, "Recovery Ramdisk Size    : 0x%x\n",
+              RecoveryRamdiskSize));
+    }
   }
 
   return Status;
@@ -1514,6 +1592,16 @@ BOOLEAN IsBuildUseRecoveryAsBoot (VOID)
   return FALSE;
 }
 #endif
+
+VOID SetRecoveryHasNoKernel (VOID)
+{
+  RecoveryHasNoKernel = TRUE;
+}
+
+BOOLEAN IsRecoveryHasNoKernel (VOID)
+{
+  return RecoveryHasNoKernel;
+}
 
 VOID
 ResetBootDevImage (VOID)
