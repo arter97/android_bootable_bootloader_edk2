@@ -1,5 +1,5 @@
 #/*
-# * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -52,7 +52,7 @@
   DebugPrintErrorLevelLib|MdePkg/Library/BaseDebugPrintErrorLevelLib/BaseDebugPrintErrorLevelLib.inf
   MemoryAllocationLib|MdePkg/Library/UefiMemoryAllocationLib/UefiMemoryAllocationLib.inf
   BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
-  BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
+  BaseMemoryLibOptDxe|MdePkg/Library/BaseMemoryLibOptDxe/BaseMemoryLibOptDxe.inf
   PrintLib|MdePkg/Library/BasePrintLib/BasePrintLib.inf
   CacheMaintenanceLib|ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.inf
   IoLib|MdePkg/Library/BaseIoLibIntrinsic/BaseIoLibIntrinsic.inf

@@ -32,6 +32,6 @@
 
 [LibraryClasses]
   DebugLib
-  BaseMemoryLib
+  BaseMemoryLibOptDxe
   UefiBootServicesTableLib
 

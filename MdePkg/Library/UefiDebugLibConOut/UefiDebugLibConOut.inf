@@ -40,7 +40,7 @@
 
 
 [LibraryClasses]
-  BaseMemoryLib
+  BaseMemoryLibOptDxe
   BaseLib
   PcdLib
   PrintLib

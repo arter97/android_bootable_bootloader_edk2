@@ -48,7 +48,7 @@
   PcdLib
   MemoryAllocationLib
   DebugLib
-  BaseMemoryLib
+  BaseMemoryLibOptDxe
   BaseLib
   UefiBootServicesTableLib
   DevicePathLib

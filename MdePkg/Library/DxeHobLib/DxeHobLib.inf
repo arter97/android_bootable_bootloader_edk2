@@ -34,7 +34,7 @@
 
 
 [LibraryClasses]
-  BaseMemoryLib
+  BaseMemoryLibOptDxe
   DebugLib
   UefiLib
 
