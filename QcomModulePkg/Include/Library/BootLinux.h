@@ -176,6 +176,9 @@ typedef struct BootLinuxParamlist {
   UINT32 RamdiskOffset;
   UINT32 PatchedKernelHdrSize;
   UINT32 DtbOffset;
+  UINT32 DtSize;
+  UINT32 VendorRamdiskTableSize;
+  UINT32 VendorBootconfigSize;
 
   // Get the below fields info from the vendor_boot image header
   // Valid only for boot image header version greater than 2
