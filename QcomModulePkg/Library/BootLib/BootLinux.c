@@ -804,8 +804,7 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   }
 
 
-  if ((Info->HeaderVersion > BOOT_HEADER_VERSION_THREE) &&
-    (BootParamlistPtr->VendorBootconfigSize)) {
+  if (Info->HeaderVersion > BOOT_HEADER_VERSION_THREE) {
 
     UINT64 *BootconfigAddr = (BootParamlistPtr->VendorImageBuffer+
         BootParamlistPtr->PageSize+
@@ -813,16 +812,31 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
         VDtbSizePageAligned+
         VRamdiskTablesizePageAligned);
 
+    /*Copy the static bootconfig params to mem*/
     gBS->CopyMem ((CHAR8 *)RamdiskLoadAddr,
-      BootconfigAddr,
-      BootParamlistPtr->VendorBootconfigSize);
-
-    End =  AddBootconfigParameters ("\n", 2, RamdiskLoadAddr,
+        BootconfigAddr,
         BootParamlistPtr->VendorBootconfigSize);
-    BootParamlistPtr->VendorBootconfigSize = (End - RamdiskLoadAddr);
-    TotalRamdiskSize += BootParamlistPtr->VendorBootconfigSize;
-  }
 
+    /*Copy the Dynamic bootconfig params to mem*/
+    if (BootParamlistPtr->FinalBootConfig) {
+      End =  AddBootconfigParameters (BootParamlistPtr->FinalBootConfig,
+        BootParamlistPtr->FinalBootConfigLen, RamdiskLoadAddr,
+        BootParamlistPtr->VendorBootconfigSize);
+    } else {
+      End =  AddBootconfigParameters ("\n",
+        2, RamdiskLoadAddr,
+        BootParamlistPtr->VendorBootconfigSize);
+    }
+
+    if (End == 0) {
+      DEBUG ((EFI_D_INFO, "Failed to load Bootconfig \n"));
+    } else {
+      BootParamlistPtr->VendorBootconfigSize = (End - RamdiskLoadAddr);
+      DEBUG ((EFI_D_INFO, "total ramdisk = %ld\n", TotalRamdiskSize));
+      TotalRamdiskSize += BootParamlistPtr->VendorBootconfigSize;
+      DEBUG ((EFI_D_INFO, "total ramdisk updated = %ld", TotalRamdiskSize));
+    }
+  }
   Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
                              BootParamlistPtr->FinalCmdLine,
                              (VOID *)RamdiskLoadAddrCopy, TotalRamdiskSize,
@@ -1163,6 +1177,8 @@ BootLinux (BootInfo *Info)
    */
   Status = UpdateCmdLine (BootParamlistPtr.CmdLine, FfbmStr, Recovery,
                    AlarmBoot, Info->VBCmdLine, &BootParamlistPtr.FinalCmdLine,
+                   &BootParamlistPtr.FinalBootConfig,
+                   &BootParamlistPtr.FinalBootConfigLen,
                    Info->HeaderVersion,
                    (VOID *)BootParamlistPtr.DeviceTreeLoadAddr);
   if (EFI_ERROR (Status)) {
