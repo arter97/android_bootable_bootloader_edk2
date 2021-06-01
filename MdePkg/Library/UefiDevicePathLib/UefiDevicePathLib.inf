@@ -39,7 +39,7 @@
   BaseLib
   MemoryAllocationLib
   DebugLib
-  BaseMemoryLib
+  BaseMemoryLibOptDxe
   PcdLib
   PrintLib
 
