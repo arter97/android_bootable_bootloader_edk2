@@ -562,9 +562,10 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     Src = Param->ChipBaseBand;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
-    Src = Param->DisplayCmdLine;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
+
+  Src = Param->DisplayCmdLine;
+  AsciiStrCatS (Dst, MaxCmdLineLen, Src);
 
   if (Param->MdtpActive) {
     Src = Param->MdtpActiveFlag;
