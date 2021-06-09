@@ -706,12 +706,11 @@ STATIC INT32 AddDDrRegionNode (VOID *Fdt)
     if (Offset < 0) {
       DEBUG ((EFI_D_ERROR, "Error adding ddr regions: %d\n", Offset));
     }
-    return Offset;
   } else {
-    DEBUG ((EFI_D_ERROR,
+    DEBUG ((EFI_D_VERBOSE,
          "Attempted to create a ddr-regions node which already exists\n"));
-    return -1;
   }
+  return Offset;
 }
 
 STATIC INT32 AddDDrRegionNodeProp (struct ddr_regions_data_info *DdrRegionsInfo,
