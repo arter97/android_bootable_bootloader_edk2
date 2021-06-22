@@ -387,7 +387,7 @@
 [LibraryClasses]
   PcdLib
   DebugLib
-  BaseMemoryLib
+  BaseMemoryLibOptDxe
 
 [Pcd]
   gEfiMdePkgTokenSpaceGuid.PcdMaximumLinkedListLength      ## SOMETIMES_CONSUMES

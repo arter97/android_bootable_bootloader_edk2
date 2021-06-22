@@ -30,7 +30,7 @@
 
 [LibraryClasses]
   DebugLib
-  BaseMemoryLib
+  BaseMemoryLibOptDxe
 
 [Packages]
   MdePkg/MdePkg.dec

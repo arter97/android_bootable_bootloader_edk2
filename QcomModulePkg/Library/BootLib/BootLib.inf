@@ -70,6 +70,7 @@
 	FdtRw.c
 	ThreadStack.c
 	DisplayCtrl.c
+        Bootconfig.c
 
 [Packages]
 	ArmPkg/ArmPkg.dec

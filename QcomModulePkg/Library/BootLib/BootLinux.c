@@ -47,6 +47,7 @@
 #include "BootStats.h"
 #include "UpdateDeviceTree.h"
 #include "libfdt.h"
+#include "Bootconfig.h"
 #include <ufdt_overlay.h>
 
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
@@ -716,7 +717,18 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   EFI_STATUS Status;
   UINT64 RamdiskLoadAddr;
   UINT64 RamdiskEndAddr = 0;
+  UINT64 RamdiskLoadAddrCopy = 0;
   UINT32 TotalRamdiskSize;
+  UINT64 End = 0;
+  UINT32 VRamdiskSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskSize,
+    BootParamlistPtr->PageSize);
+  UINT32 VDtbSizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->DtSize,
+    BootParamlistPtr->PageSize);
+  UINT32 VRamdiskTablesizePageAligned =
+    LOCAL_ROUND_TO_PAGE (BootParamlistPtr->VendorRamdiskTableSize,
+    BootParamlistPtr->PageSize);
 
   if (BootParamlistPtr == NULL) {
     DEBUG ((EFI_D_ERROR, "Invalid input parameters\n"));
@@ -742,16 +754,7 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                          BootParamlistPtr->RamdiskOffset));
     return EFI_BAD_BUFFER_SIZE;
   }
-
-  Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
-                             BootParamlistPtr->FinalCmdLine,
-                             (VOID *)RamdiskLoadAddr, TotalRamdiskSize,
-                             BootParamlistPtr->BootingWith32BitKernel);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
-    return Status;
-  }
-
+  RamdiskLoadAddrCopy = RamdiskLoadAddr;
   /* If the boot-image version is greater than 2, place the vendor-ramdisk
    * first in the memory, and then place ramdisk.
    * This concatination would result in an overlay for .gzip and .cpio formats.
@@ -776,9 +779,10 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
   }
 
   gBS->CopyMem ((CHAR8 *)RamdiskLoadAddr,
-                BootParamlistPtr->ImageBuffer +
-                BootParamlistPtr->RamdiskOffset,
-                BootParamlistPtr->RamdiskSize);
+    BootParamlistPtr->ImageBuffer+
+    BootParamlistPtr->RamdiskOffset,
+    BootParamlistPtr->RamdiskSize);
+  RamdiskLoadAddr +=BootParamlistPtr->RamdiskSize;
 
   if (BootParamlistPtr->BootingWith32BitKernel) {
     if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
@@ -798,16 +802,59 @@ LoadAddrAndDTUpdate (BootInfo *Info, BootParamlist *BootParamlistPtr)
                   BootParamlistPtr->KernelSizeActual);
   }
 
+
+  if (Info->HeaderVersion > BOOT_HEADER_VERSION_THREE) {
+
+    UINT64 *BootconfigAddr = (BootParamlistPtr->VendorImageBuffer+
+        BootParamlistPtr->PageSize+
+        VRamdiskSizePageAligned+
+        VDtbSizePageAligned+
+        VRamdiskTablesizePageAligned);
+
+    /*Copy the static bootconfig params to mem*/
+    gBS->CopyMem ((CHAR8 *)RamdiskLoadAddr,
+        BootconfigAddr,
+        BootParamlistPtr->VendorBootconfigSize);
+
+    /*Copy the Dynamic bootconfig params to mem*/
+    if (BootParamlistPtr->FinalBootConfig) {
+      End =  AddBootconfigParameters (BootParamlistPtr->FinalBootConfig,
+        BootParamlistPtr->FinalBootConfigLen, RamdiskLoadAddr,
+        BootParamlistPtr->VendorBootconfigSize);
+    } else {
+      End =  AddBootconfigParameters ("\n",
+        2, RamdiskLoadAddr,
+        BootParamlistPtr->VendorBootconfigSize);
+    }
+
+    if (End == 0) {
+      DEBUG ((EFI_D_INFO, "Failed to load Bootconfig \n"));
+    } else {
+      BootParamlistPtr->VendorBootconfigSize = (End - RamdiskLoadAddr);
+      TotalRamdiskSize += BootParamlistPtr->VendorBootconfigSize;
+    }
+  }
+  Status = UpdateDeviceTree ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr,
+                             BootParamlistPtr->FinalCmdLine,
+                             (VOID *)RamdiskLoadAddrCopy, TotalRamdiskSize,
+                             BootParamlistPtr->BootingWith32BitKernel);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
+    return Status;
+  }
+
   return EFI_SUCCESS;
 }
 
 STATIC EFI_STATUS
-CatCmdLine (BootParamlist *BootParamlistPtr,
-            boot_img_hdr_v3 *BootImgHdrV3,
-            vendor_boot_img_hdr_v3 *VendorBootImgHdrV3)
+CatCmdLine (BootParamlist *BootParamlistPtr, BootInfo *Info)
 {
   UINTN MaxCmdLineLen = BOOT_ARGS_SIZE +
                         BOOT_EXTRA_ARGS_SIZE + VENDOR_BOOT_ARGS_SIZE;
+  boot_img_hdr_v3 *BootImgHdrV3;
+  vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
+  boot_img_hdr_v4 *BootImgHdrV4;
+  vendor_boot_img_hdr_v4 *VendorBootImgHdrV4;
 
   BootParamlistPtr->CmdLine = AllocateZeroPool (MaxCmdLineLen);
   if (!BootParamlistPtr->CmdLine) {
@@ -819,11 +866,23 @@ CatCmdLine (BootParamlist *BootParamlistPtr,
   /* Place the vendor_boot image cmdline first so that the cmdline
    * from boot image takes precedence in case of duplicates.
    */
-  AsciiStrCpyS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
-               (CONST CHAR8 *)VendorBootImgHdrV3->cmdline);
-  AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen, " ");
-  AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
-               (CONST CHAR8 *)BootImgHdrV3->cmdline);
+  if (Info->HeaderVersion == BOOT_HEADER_VERSION_THREE) {
+    BootImgHdrV3 = BootParamlistPtr->ImageBuffer;
+    VendorBootImgHdrV3 = BootParamlistPtr->VendorImageBuffer;
+    AsciiStrCpyS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
+      (CONST CHAR8 *)VendorBootImgHdrV3->cmdline);
+    AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen, " ");
+    AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
+      (CONST CHAR8 *)BootImgHdrV3->cmdline);
+  } else if (Info->HeaderVersion == BOOT_HEADER_VERSION_FOUR) {
+    BootImgHdrV4 = BootParamlistPtr->ImageBuffer;
+    VendorBootImgHdrV4 = BootParamlistPtr->VendorImageBuffer;
+    AsciiStrCpyS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
+      (CONST CHAR8 *)VendorBootImgHdrV4->cmdline);
+    AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen, " ");
+    AsciiStrCatS (BootParamlistPtr->CmdLine, MaxCmdLineLen,
+      (CONST CHAR8 *)BootImgHdrV4->cmdline);
+  }
 
   return EFI_SUCCESS;
 }
@@ -837,6 +896,9 @@ UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
   boot_img_hdr_v3 *BootImgHdrV3;
   vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
   boot_img_hdr_v3 *RecoveryBootImgHdrV3;
+  boot_img_hdr_v4 *BootImgHdrV4;
+  vendor_boot_img_hdr_v4 *VendorBootImgHdrV4;
+  boot_img_hdr_v4 *RecoveryBootImgHdrV4;
 
   if (Info->HeaderVersion < BOOT_HEADER_VERSION_THREE) {
     BootParamlistPtr->KernelSize =
@@ -852,49 +914,95 @@ UpdateBootParamsSizeAndCmdLine (BootInfo *Info, BootParamlist *BootParamlistPtr)
     BootParamlistPtr->CmdLine[BOOT_ARGS_SIZE - 1] = '\0';
 
     return EFI_SUCCESS;
+  } else if (Info->HeaderVersion == BOOT_HEADER_VERSION_THREE) {
+    BootImgHdrV3 = BootParamlistPtr->ImageBuffer;
+    Status = GetImage (Info, (VOID **)&VendorBootImgHdrV3,
+    &VendorBootImgSize, "vendor_boot");
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR,
+        "UpdateBootParamsSizeAndCmdLine: Failed to find vendor_boot image\n"));
+      return Status;
+    }
+
+    if (Info->BootIntoRecovery &&
+        IsRecoveryHasNoKernel ()) {
+      Status = GetImage (Info, (VOID **)&RecoveryBootImgHdrV3,
+                         &RecoveryBootImgSize, "recovery");
+
+        if (Status != EFI_SUCCESS) {
+          DEBUG ((EFI_D_ERROR,
+          "UpdateBootParamsSizeAndCmdLine: Failed to find recovery image\n"));
+          return Status;
+        }
+
+        BootParamlistPtr->RecoveryImageBuffer = RecoveryBootImgHdrV3;
+        BootParamlistPtr->RecoveryImageSize = RecoveryBootImgSize;
+        BootParamlistPtr->RecoveryRamdiskSize =
+                          RecoveryBootImgHdrV3->ramdisk_size;
+    } else {
+      BootParamlistPtr->RecoveryImageBuffer = NULL;
+      BootParamlistPtr->RecoveryImageSize = 0;
+      BootParamlistPtr->RecoveryRamdiskSize = 0;
+    }
+
+    BootParamlistPtr->VendorImageBuffer = VendorBootImgHdrV3;
+    BootParamlistPtr->VendorImageSize = VendorBootImgSize;
+    BootParamlistPtr->KernelSize = BootImgHdrV3->kernel_size;
+    BootParamlistPtr->RamdiskSize = BootImgHdrV3->ramdisk_size;
+    BootParamlistPtr->VendorRamdiskSize =
+    VendorBootImgHdrV3->vendor_ramdisk_size;
+    BootParamlistPtr->PageSize = VendorBootImgHdrV3->page_size;
+    BootParamlistPtr->SecondSize = 0;
+  } else if (Info->HeaderVersion == BOOT_HEADER_VERSION_FOUR) {
+
+    BootImgHdrV4 = BootParamlistPtr->ImageBuffer;
+
+    Status = GetImage (Info, (VOID **)&VendorBootImgHdrV4,
+    &VendorBootImgSize, "vendor_boot");
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR,
+        "UpdateBootParamsSizeAndCmdLine: vendor_boot"
+                       " image header not found\n"));
+      return Status;
+    }
+
+    if (Info->BootIntoRecovery &&
+        IsRecoveryHasNoKernel ()) {
+      Status = GetImage (Info, (VOID **)&RecoveryBootImgHdrV4,
+                         &RecoveryBootImgSize, "recovery");
+
+        if (Status != EFI_SUCCESS) {
+          DEBUG ((EFI_D_ERROR,
+          "UpdateBootParamsSizeAndCmdLine: Failed to find recovery image\n"));
+          return Status;
+        }
+
+        BootParamlistPtr->RecoveryImageBuffer = RecoveryBootImgHdrV4;
+        BootParamlistPtr->RecoveryImageSize = RecoveryBootImgSize;
+        BootParamlistPtr->RecoveryRamdiskSize =
+                          RecoveryBootImgHdrV4->ramdisk_size;
+    } else {
+      BootParamlistPtr->RecoveryImageBuffer = NULL;
+      BootParamlistPtr->RecoveryImageSize = 0;
+      BootParamlistPtr->RecoveryRamdiskSize = 0;
+    }
+
+    BootParamlistPtr->VendorImageBuffer = VendorBootImgHdrV4;
+    BootParamlistPtr->VendorImageSize = VendorBootImgSize;
+    BootParamlistPtr->KernelSize = BootImgHdrV4->kernel_size;
+    BootParamlistPtr->RamdiskSize = BootImgHdrV4->ramdisk_size;
+    BootParamlistPtr->VendorRamdiskSize =
+    VendorBootImgHdrV4->vendor_ramdisk_size;
+    BootParamlistPtr->PageSize = VendorBootImgHdrV4->page_size;
+    BootParamlistPtr->DtSize = VendorBootImgHdrV4->dtb_size;
+    BootParamlistPtr->VendorRamdiskTableSize =
+      VendorBootImgHdrV4->VendorRamdiskTableSize;
+    BootParamlistPtr->VendorBootconfigSize =
+      VendorBootImgHdrV4->VendorBootconfigSize;
+    BootParamlistPtr->SecondSize = 0;
   }
 
-  BootImgHdrV3 = BootParamlistPtr->ImageBuffer;
-
-  Status = GetImage (Info, (VOID **)&VendorBootImgHdrV3,
-                     &VendorBootImgSize, "vendor_boot");
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR,
-    "UpdateBootParamsSizeAndCmdLine: Failed to find vendor_boot image\n"));
-    return Status;
-  }
-
-  if (Info->BootIntoRecovery &&
-    IsRecoveryHasNoKernel ()) {
-    Status = GetImage (Info, (VOID **)&RecoveryBootImgHdrV3,
-                       &RecoveryBootImgSize, "recovery");
-
-      if (Status != EFI_SUCCESS) {
-        DEBUG ((EFI_D_ERROR,
-        "UpdateBootParamsSizeAndCmdLine: Failed to find recovery image\n"));
-        return Status;
-      }
-
-      BootParamlistPtr->RecoveryImageBuffer = RecoveryBootImgHdrV3;
-      BootParamlistPtr->RecoveryImageSize = RecoveryBootImgSize;
-      BootParamlistPtr->RecoveryRamdiskSize =
-                        RecoveryBootImgHdrV3->ramdisk_size;
-  } else {
-    BootParamlistPtr->RecoveryImageBuffer = NULL;
-    BootParamlistPtr->RecoveryImageSize = 0;
-    BootParamlistPtr->RecoveryRamdiskSize = 0;
-  }
-
-  BootParamlistPtr->VendorImageBuffer = VendorBootImgHdrV3;
-  BootParamlistPtr->VendorImageSize = VendorBootImgSize;
-  BootParamlistPtr->KernelSize = BootImgHdrV3->kernel_size;
-  BootParamlistPtr->RamdiskSize = BootImgHdrV3->ramdisk_size;
-  BootParamlistPtr->VendorRamdiskSize =
-                    VendorBootImgHdrV3->vendor_ramdisk_size;
-  BootParamlistPtr->PageSize = VendorBootImgHdrV3->page_size;
-  BootParamlistPtr->SecondSize = 0;
-
-  Status = CatCmdLine (BootParamlistPtr, BootImgHdrV3, VendorBootImgHdrV3);
+  Status = CatCmdLine (BootParamlistPtr, Info);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR,
            "UpdateBootParamsSizeAndCmdLine: Failed to cat cmdline\n"));
@@ -917,6 +1025,8 @@ BootLinux (BootInfo *Info)
   LINUX_KERNEL32 LinuxKernel32;
   UINT32 RamdiskSizeActual = 0;
   UINT32 SecondSizeActual = 0;
+  UINT64 KernelSizeReserved = 0;
+  UINTN DataSize;
 
   /*Boot Image header information variables*/
   CHAR8 FfbmStr[FFBM_MODE_BUF_SIZE] = {'\0'};
@@ -1064,6 +1174,8 @@ BootLinux (BootInfo *Info)
    */
   Status = UpdateCmdLine (BootParamlistPtr.CmdLine, FfbmStr, Recovery,
                    AlarmBoot, Info->VBCmdLine, &BootParamlistPtr.FinalCmdLine,
+                   &BootParamlistPtr.FinalBootConfig,
+                   &BootParamlistPtr.FinalBootConfigLen,
                    Info->HeaderVersion,
                    (VOID *)BootParamlistPtr.DeviceTreeLoadAddr);
   if (EFI_ERROR (Status)) {
@@ -1104,6 +1216,15 @@ BootLinux (BootInfo *Info)
   StackBase = KernIntf->Thread->ThreadGetUnsafeSPBase (ThreadNum);
   StackCurrent = KernIntf->Thread->ThreadGetUnsafeSPCurrent (ThreadNum);
 
+  DataSize = sizeof (KernelSizeReserved);
+  Status = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
+                               NULL, &DataSize, &KernelSizeReserved);
+
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_INFO, "Failed to get size of kernel region\n"));
+    return Status;
+  }
+
   DEBUG ((EFI_D_INFO, "\nShutting Down UEFI Boot Services: %lu ms\n",
           GetTimerCountms ()));
   /*Shut down UEFI boot services*/
@@ -1116,7 +1237,7 @@ BootLinux (BootInfo *Info)
   }
 
   PreparePlatformHardware (KernIntf, (VOID *)BootParamlistPtr.KernelLoadAddr,
-                  (UINTN)BootParamlistPtr.KernelSizeActual,
+                  (UINTN)KernelSizeReserved,
                   (VOID *)BootParamlistPtr.RamdiskLoadAddr,
                   (UINTN)RamdiskSizeActual,
                   (VOID *)BootParamlistPtr.DeviceTreeLoadAddr, DT_SIZE_2MB,
@@ -1193,6 +1314,9 @@ CheckImageHeader (VOID *ImageHdrBuffer,
   boot_img_hdr_v3 *BootImgHdrV3;
   vendor_boot_img_hdr_v3 *VendorBootImgHdrV3;
   boot_img_hdr_v3 *RecoveryImgHdrV3 = NULL;
+  boot_img_hdr_v4 *BootImgHdrV4;
+  vendor_boot_img_hdr_v4 *VendorBootImgHdrV4;
+  boot_img_hdr_v4 *RecoveryImgHdrV4;
 
   UINT32 KernelSizeActual = 0;
   UINT32 DtSizeActual = 0;
@@ -1222,9 +1346,8 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     RamdiskSize = ((boot_img_hdr *)(ImageHdrBuffer))->ramdisk_size;
     SecondSize = ((boot_img_hdr *)(ImageHdrBuffer))->second_size;
     *PageSize = ((boot_img_hdr *)(ImageHdrBuffer))->page_size;
-  } else {
-    if (!VendorImageHdrBuffer ||
-        CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
+  } else if (HeaderVersion == BOOT_HEADER_VERSION_THREE) {
+    if (CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
                      (VendorImageHdrBuffer))->magic,
                      VENDOR_BOOT_MAGIC, VENDOR_BOOT_MAGIC_SIZE)) {
       DEBUG ((EFI_D_ERROR, "Invalid vendor_boot image header\n"));
@@ -1239,6 +1362,49 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     VendorRamdiskSize = VendorBootImgHdrV3->vendor_ramdisk_size;
     *PageSize = VendorBootImgHdrV3->page_size;
     DtSize = VendorBootImgHdrV3->dtb_size;
+
+    if (*PageSize > BOOT_IMG_MAX_PAGE_SIZE) {
+      DEBUG ((EFI_D_ERROR, "Invalid vendor image pagesize. "
+                           "MAX: %u. PageSize: %u and VendorImageHdrSize: %u\n",
+                        BOOT_IMG_MAX_PAGE_SIZE, *PageSize, VendorImageHdrSize));
+      return EFI_BAD_BUFFER_SIZE;
+    }
+
+    VendorRamdiskSizeActual = ROUND_TO_PAGE (VendorRamdiskSize, *PageSize - 1);
+    if (VendorRamdiskSize &&
+        !VendorRamdiskSizeActual) {
+      DEBUG ((EFI_D_ERROR, "Integer Overflow: Vendor Ramdisk Size = %u\n",
+              RamdiskSize));
+      return EFI_BAD_BUFFER_SIZE;
+    }
+
+    if (BootIntoRecovery &&
+        RecoveryHdrBuffer) {
+      RecoveryImgHdrV3 = RecoveryHdrBuffer;
+      RecoveryRamdiskSize = RecoveryImgHdrV3->ramdisk_size;
+      RecoveryRamdiskSizeActual = ROUND_TO_PAGE (RecoveryRamdiskSize,
+                      *PageSize - 1);
+      if (RecoveryRamdiskSize &&
+          !RecoveryRamdiskSizeActual) {
+        DEBUG ((EFI_D_ERROR, "Integer Overflow checking Recovery Ramdisk\n"));
+        return EFI_BAD_BUFFER_SIZE;
+      }
+    }
+  } else if (HeaderVersion == BOOT_HEADER_VERSION_FOUR) {
+    if (CompareMem ((VOID *)((vendor_boot_img_hdr_v4 *)
+                    (VendorImageHdrBuffer))->magic,
+                    VENDOR_BOOT_MAGIC, VENDOR_BOOT_MAGIC_SIZE)) {
+      DEBUG ((EFI_D_ERROR, "Invalid vendor_boot image header\n"));
+      return EFI_NO_MEDIA;
+    }
+    BootImgHdrV4 = ImageHdrBuffer;
+    VendorBootImgHdrV4 = VendorImageHdrBuffer;
+
+    KernelSize = BootImgHdrV4->kernel_size;
+    RamdiskSize = BootImgHdrV4->ramdisk_size;
+    VendorRamdiskSize = VendorBootImgHdrV4->vendor_ramdisk_size;
+    *PageSize = VendorBootImgHdrV4->page_size;
+    DtSize = VendorBootImgHdrV4->dtb_size;
 
     if (*PageSize > BOOT_IMG_MAX_PAGE_SIZE) {
       DEBUG ((EFI_D_ERROR, "Invalid vendor-img pagesize. "
@@ -1257,8 +1423,8 @@ CheckImageHeader (VOID *ImageHdrBuffer,
 
     if (BootIntoRecovery &&
         RecoveryHdrBuffer) {
-      RecoveryImgHdrV3 = RecoveryHdrBuffer;
-      RecoveryRamdiskSize = RecoveryImgHdrV3->ramdisk_size;
+      RecoveryImgHdrV4 = RecoveryHdrBuffer;
+      RecoveryRamdiskSize = RecoveryImgHdrV4->ramdisk_size;
       RecoveryRamdiskSizeActual = ROUND_TO_PAGE (RecoveryRamdiskSize,
                       *PageSize - 1);
       if (RecoveryRamdiskSize &&
@@ -1425,7 +1591,8 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     DEBUG ((EFI_D_VERBOSE, "Vendor Ramdisk Size      : 0x%x\n",
             VendorRamdiskSize));
     if (BootIntoRecovery &&
-        RecoveryImgHdrV3) {
+        (RecoveryImgHdrV3 ||
+         RecoveryImgHdrV4)) {
       DEBUG ((EFI_D_VERBOSE, "Recovery Ramdisk Size    : 0x%x\n",
               RecoveryRamdiskSize));
     }
