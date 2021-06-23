@@ -1210,6 +1210,12 @@ LoadImageAndAuthVB2 (BootInfo *Info)
         CurrentSlot = GetCurrentSlotSuffix ();
     }
 
+    /* Load vendor boot in following conditions
+     * 1. In Ram load case where Header version is 0 because
+     * boot image is not loaded in the flow& Valid partition.
+     * 2. In Case of header version 3 & valid partititon.
+     */
+
     if (IsValidPartition (&CurrentSlot, L"vendor_boot") &&
        (HeaderVersion == BOOT_HEADER_VERSION_ZERO ||
         HeaderVersion >= BOOT_HEADER_VERSION_THREE)) {
