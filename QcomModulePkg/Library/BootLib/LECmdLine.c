@@ -1,6 +1,6 @@
 /** @file LECmdLine.c
  *
- * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, 2021 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -249,7 +249,7 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         AsciiSPrint (
         DMTemp,
         MAX_VERITY_CMD_LINE,
-        " %a dm=\"%a none ro,0 %a %a 1 %a%d %a%d %a %a %a %d %a %a %a\"",
+        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a%d %a%d %a %a %a %d %a %a %a\"",
         VerityRoot, VerityAppliedOn, SectorSize, VerityName,
         VeritySystemPartitionStr, Index, VeritySystemPartitionStr, Index,
         VerityBlockSize, VerityBlockSize, DataSize, HashSize, VerityEncriptionName,
@@ -260,7 +260,7 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
         AsciiSPrint (
         DMTemp,
         MAX_VERITY_CMD_LINE,
-        " %a dm=\"%a none ro,0 %a %a 1 %a%d %a%d %a %a %a %d %a %a %a %d %a %a %a %a%d %a 2 %a %a %a %a\"",
+        " %a dm-mod.create=\"%a,,,ro,0 %a %a 1 %a%d %a%d %a %a %a %d %a %a %a %d %a %a %a %a%d %a 2 %a %a %a %a\"",
         VerityRoot, VerityAppliedOn, SectorSize, VerityName,
         VeritySystemPartitionStr, Index, VeritySystemPartitionStr, Index,
         VerityBlockSize, VerityBlockSize, DataSize, HashSize, VerityEncriptionName,
