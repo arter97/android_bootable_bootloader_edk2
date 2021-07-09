@@ -1316,7 +1316,7 @@ CheckImageHeader (VOID *ImageHdrBuffer,
   boot_img_hdr_v3 *RecoveryImgHdrV3 = NULL;
   boot_img_hdr_v4 *BootImgHdrV4;
   vendor_boot_img_hdr_v4 *VendorBootImgHdrV4;
-  boot_img_hdr_v4 *RecoveryImgHdrV4;
+  boot_img_hdr_v4 *RecoveryImgHdrV4 = NULL;
 
   UINT32 KernelSizeActual = 0;
   UINT32 DtSizeActual = 0;
@@ -1347,7 +1347,8 @@ CheckImageHeader (VOID *ImageHdrBuffer,
     SecondSize = ((boot_img_hdr *)(ImageHdrBuffer))->second_size;
     *PageSize = ((boot_img_hdr *)(ImageHdrBuffer))->page_size;
   } else if (HeaderVersion == BOOT_HEADER_VERSION_THREE) {
-    if (CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
+    if (!VendorImageHdrBuffer ||
+        CompareMem ((VOID *)((vendor_boot_img_hdr_v3 *)
                      (VendorImageHdrBuffer))->magic,
                      VENDOR_BOOT_MAGIC, VENDOR_BOOT_MAGIC_SIZE)) {
       DEBUG ((EFI_D_ERROR, "Invalid vendor_boot image header\n"));

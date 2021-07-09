@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -142,7 +142,8 @@ GetPartitionIndex (CHAR16 *Pname)
 
   for (i = 0; i < PartitionCount; i++) {
     if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, Pname,
-                  ARRAY_SIZE (PtnEntries[i].PartEntry.PartitionName))) {
+                  MIN (ARRAY_SIZE (PtnEntries[i].PartEntry.PartitionName),
+                       StrLen (Pname)))) {
       return i;
     }
   }
