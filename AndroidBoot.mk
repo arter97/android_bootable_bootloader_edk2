@@ -144,24 +144,31 @@ $(ABL_OUT):
 
 # Top level target
 LOCAL_ABL_PATH := bootable/bootloader/edk2
-LOCAL_ABL_SRC_FILE := \
-		$(wildcard $(LOCAL_ABL_PATH)/*) \
-		$(wildcard $(LOCAL_ABL_PATH)/*/*) \
-		$(wildcard $(LOCAL_ABL_PATH)/*/*/*) \
-		$(wildcard $(LOCAL_ABL_PATH)/*/*/*/*) \
+_LOCAL_PATH := $(LOCAL_PATH)
+LOCAL_PATH := $(LOCAL_ABL_PATH)
+LOCAL_ABL_SRC_FILE := $(addprefix $(LOCAL_PATH)/,$(call find-subdir-files,-type f))
+
+LOCAL_PATH := $(CLANG_BIN)
+CLANG_FILES := $(addprefix $(LOCAL_PATH)/,$(call find-subdir-files,-type f))
+
+LOCAL_PATH := $(CLANG35_GCC_TOOLCHAIN)
+GCC_FILES := $(addprefix $(LOCAL_PATH)/,$(call find-subdir-files,-type f))
+
+# Reset LOCAL_PATH to not confuse android build system later
+LOCAL_PATH := $(_LOCAL_PATH)
+
+LOCAL_ABL_TOOLS := \
 		$(PREBUILT_PYTHON_PATH) \
 		$(MAKEPATH)make \
 		$(ANDROID_TOP)/$(CLANG) \
 		$(ANDROID_TOP)/$(CLANG_CXX) \
 		$(ANDROID_TOP)/$(HOST_AR) \
 		$(ANDROID_TOP)/$(SOONG_LLVM_PREBUILTS_PATH)/ld.lld \
-		$(wildcard $(CLANG_BIN)/*) \
-		$(wildcard $(CLANG35_GCC_TOOLCHAIN)/*) \
-		$(wildcard $(CLANG35_GCC_TOOLCHAIN)/*/*) \
-		$(wildcard $(CLANG35_GCC_TOOLCHAIN)/*/*/*) \
-		$(wildcard $(CLANG35_GCC_TOOLCHAIN)/*/*/*/*) \
+		$(CLANG_FILES) \
+		$(GCC_FILES) \
 		$(SECTOOLSV2_BIN)
-$(TARGET_ABL): $(LOCAL_ABL_SRC_FILE) | $(ABL_OUT) $(INSTALLED_KEYSTOREIMAGE_TARGET)
+
+$(TARGET_ABL): $(LOCAL_ABL_SRC_FILE) $(LOCAL_ABL_TOOLS) | $(ABL_OUT) $(INSTALLED_KEYSTOREIMAGE_TARGET)
 	$(MAKEPATH)make -C bootable/bootloader/edk2 \
 		BOOTLOADER_OUT=../../../$(ABL_OUT) \
 		all \
