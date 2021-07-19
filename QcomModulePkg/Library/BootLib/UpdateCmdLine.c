@@ -575,13 +575,23 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
   if (Param->MultiSlotBoot &&
      !IsBootDevImage ()) {
      /* Slot suffix */
-    Src = Param->AndroidSlotSuffix;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+      Src = Param->AndroidSlotSuffix;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    }
 
     UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
                           Param->SlotSuffixAscii);
-    Src = Param->SlotSuffixAscii;
-    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+      Src = Param->SlotSuffixAscii;
+      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+    } else {
+      AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
+                     Param->SlotSuffixAscii,
+                     BootConfigListHead,
+                     AsciiStrLen (Param->AndroidSlotSuffix),
+                     AsciiStrLen (Param->SlotSuffixAscii));
+    }
   }
 
   if ((IsBuildAsSystemRootImage () &&
@@ -711,6 +721,12 @@ AddtoBootConfigList (BOOLEAN BootConfigFlag,
   NewNode = (struct BootConfigParamNode *)
                AllocateBootConfigNode (ParamKeyLen + SIZE_OF_DELIM +
                SIZE_OF_DELIM + ParamValueLen);
+  if (!NewNode) {
+    DEBUG ((EFI_D_ERROR, "Failed to add %s to bootconfig! Out of memory\n",
+            ParamKey));
+    return;
+  }
+
   gBS->CopyMem (NewNode->param, (CHAR8*)ParamKey, ParamKeyLen);
   if (ParamValue) {
     gBS->CopyMem (&NewNode->param[ParamKeyLen], (CHAR8*)ParamValue,
@@ -1035,7 +1051,11 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   if (MultiSlotBoot &&
      !IsBootDevImage ()) {
     /* Add additional length for slot suffix */
-    CmdLineLen += AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+    ParamLen = AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+    BootConfigFlag = IsAndroidBootParam (AndroidSlotSuffix,
+                               ParamLen, HeaderVersion);
+    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+                                         BootConfigLen);
   }
 
   if ((IsBuildAsSystemRootImage () &&
