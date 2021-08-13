@@ -443,7 +443,9 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
     }
   }
 
-  AsciiSPrint (MemOffAmt, MEM_OFF_SIZE, "%luB", MemLimit);
+  MemLimit /= MB_SIZE;
+
+  AsciiSPrint (MemOffAmt, MEM_OFF_SIZE, "%dMB", MemLimit);
 
   return EFI_SUCCESS;
 
