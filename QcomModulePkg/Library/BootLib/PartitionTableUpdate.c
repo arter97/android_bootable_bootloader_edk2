@@ -142,8 +142,7 @@ GetPartitionIndex (CHAR16 *Pname)
 
   for (i = 0; i < PartitionCount; i++) {
     if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, Pname,
-                  MIN (ARRAY_SIZE (PtnEntries[i].PartEntry.PartitionName),
-                       StrLen (Pname)))) {
+                  ARRAY_SIZE (PtnEntries[i].PartEntry.PartitionName))) {
       return i;
     }
   }

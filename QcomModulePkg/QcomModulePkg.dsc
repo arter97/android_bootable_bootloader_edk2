@@ -47,12 +47,12 @@
   FLASH_DEFINITION               = QcomModulePkg/QcomModulePkg.fdf
 
 [LibraryClasses.common]
-  DebugLib|MdePkg/Library/UefiDebugLibConOut/UefiDebugLibConOut.inf
   BaseStackCheckLib|MdePkg/Library/BaseStackCheckLib/BaseStackCheckLib.inf
   DebugPrintErrorLevelLib|MdePkg/Library/BaseDebugPrintErrorLevelLib/BaseDebugPrintErrorLevelLib.inf
   MemoryAllocationLib|MdePkg/Library/UefiMemoryAllocationLib/UefiMemoryAllocationLib.inf
   BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
   BaseMemoryLibOptDxe|MdePkg/Library/BaseMemoryLibOptDxe/BaseMemoryLibOptDxe.inf
+  BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
   PrintLib|MdePkg/Library/BasePrintLib/BasePrintLib.inf
   CacheMaintenanceLib|ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.inf
   IoLib|MdePkg/Library/BaseIoLibIntrinsic/BaseIoLibIntrinsic.inf
@@ -164,6 +164,7 @@
 
 	QcomModulePkg/Application/LinuxLoader/LinuxLoader.inf {
 		<LibraryClasses>
+			BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
 			DxeServicesTableLib|MdePkg/Library/DxeServicesTableLib/DxeServicesTableLib.inf
 			UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
 			UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
@@ -171,7 +172,6 @@
 			Zlib|QcomModulePkg/Library/zlib/zlib.inf
 			ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
 			BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
-			DebugLib|MdePkg/Library/UefiDebugLibConOut/UefiDebugLibConOut.inf
 			DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
 			HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
 			PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
