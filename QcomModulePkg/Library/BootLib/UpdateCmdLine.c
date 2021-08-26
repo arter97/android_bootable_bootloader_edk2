@@ -584,6 +584,9 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
       Src = Param->SlotSuffixAscii;
       AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     } else {
+      BootConfigFlag = IsAndroidBootParam (Param->AndroidSlotSuffix,
+                              AsciiStrLen (Param->AndroidSlotSuffix),
+                                       Param->HeaderVersion);
       AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
                      Param->SlotSuffixAscii,
                      BootConfigListHead,
