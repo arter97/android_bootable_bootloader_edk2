@@ -379,7 +379,7 @@ GetSystemPath (CHAR8 **SysPath, BootInfo *Info)
     } else {
       if (IsLEVerity () &&
           !Info->BootIntoRecovery &&
-          !IsLEVerityNandIgnore ()) {
+          IsLEVerityUseExt4Gluebi ()) {
         AsciiSPrint (*SysPath, MAX_PATH_SIZE,
             " rootfstype=ext4 ubi.mtd=%d ubi.block=0,0 root=/dev/dm-0",
             (Index - 1));
