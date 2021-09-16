@@ -55,26 +55,26 @@ STATIC CONST CHAR8 *FecRoot = "fec_roots";
 STATIC CONST CHAR8 *FecBlock = "fec_blocks";
 STATIC CONST CHAR8 *FecStart = "fec_start";
 
-STATIC BOOLEAN LEVerityNandIgnore;
-
 #define FEATUREARGS 10
 #if VERITY_LE
 BOOLEAN IsLEVerity (VOID)
 {
   return TRUE;
 }
-
-BOOLEAN IsLEVerityNandIgnore (VOID)
-{
-  return LEVerityNandIgnore;
-}
 #else
 BOOLEAN IsLEVerity (VOID)
 {
   return FALSE;
 }
+#endif
 
-BOOLEAN IsLEVerityNandIgnore (VOID)
+#if VERITY_LE_USE_EXT4_GLUEBI
+BOOLEAN IsLEVerityUseExt4Gluebi (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsLEVerityUseExt4Gluebi (VOID)
 {
   return FALSE;
 }
@@ -159,13 +159,10 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
   INT32 HashSize = 0;
   CHAR8 *Hash = NULL;
   CHAR8 *FecOff = NULL;
-  CHAR8 *NandIgnore = NULL;
   CHAR8 *DMDataStr = NULL;
   BOOLEAN MultiSlotBoot = FALSE;
   CHAR16 PartitionName[MAX_GPT_NAME_SIZE];
   INT32 Index = 0;
-
-  LEVerityNandIgnore = FALSE;
 
   /* Get verity command line from SourceCmdLine */
   DMDataStr = AsciiStrStr (SourceCmdLine, "verity=");
@@ -232,21 +229,6 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
       DEBUG ((EFI_D_ERROR, "GetLEVerityCmdLine: Fec Offset error \n"));
       goto ErrLEVerityout;
     }
-    DMDataStr += Length;
-
-    NandIgnore = AllocateZeroPool (sizeof (CHAR8) * MAX_VERITY_NAND_IGNORE_LEN);
-    if (!NandIgnore) {
-      DEBUG ((EFI_D_ERROR, "Failed to allocate memory for NandIgnore\n"));
-      Status = EFI_OUT_OF_RESOURCES;
-      goto ErrLEVerityout;
-    }
-
-    Status = LEVerityWordnCpy ((CHAR8 *) &NandIgnore[0],
-                               MAX_VERITY_NAND_IGNORE_LEN, DMDataStr, &Length);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "GetLEVerityCmdLine: Nand Ignore error \n"));
-      goto ErrLEVerityout;
-    }
 
     /* Get HashSize which is always greater by 8 bytes to DataSize */
     HashSize = AsciiStrDecimalToUintn ((CHAR8 *) &DataSize[0]) + 8;
@@ -283,12 +265,11 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
     GetRootDeviceType (RootDevStr, BOOT_DEV_NAME_SIZE_MAX);
     if (!AsciiStrCmp ("NAND", RootDevStr)) {
       /*
-       * If Nand Ignore flag set, do not append verity cmdline parameters.
+       * Only append verity command line parameters if using gluebi
        * This is to support a use case where same boot image may be used
        * by emmc and nand but nand does not support read-only limitations
        */
-      if (!AsciiStrCmp ("1", NandIgnore)) {
-        LEVerityNandIgnore = TRUE;
+      if (!IsLEVerityUseExt4Gluebi ()) {
         *LEVerityCmdLine = AllocateZeroPool (1);
         if (!*LEVerityCmdLine) {
           DEBUG ((EFI_D_ERROR, "LEVerityCmdLine buffer: Out of resources\n"));
@@ -376,10 +357,6 @@ ErrLEVerityout:
   if (FecOff != NULL) {
     FreePool (FecOff);
     FecOff = NULL;
-  }
-  if (NandIgnore != NULL) {
-    FreePool (NandIgnore);
-    NandIgnore = NULL;
   }
   if (DMTemp != NULL) {
     FreePool (DMTemp);

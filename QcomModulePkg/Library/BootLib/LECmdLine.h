@@ -56,6 +56,13 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
  **/
 BOOLEAN IsLEVerity (VOID);
 
-BOOLEAN IsLEVerityNandIgnore (VOID);
+/**
+   This function checks if VERITY_LE_USE_EXT4_GLUEBI is defined or not.
+   @param[in]   VOID   VOID
+   @retval      TRUE   If VERITY_LE_USE_EXT4_GLUEBI is defined.
+   @retval      FALSE  If VERITY_LE_USE_EXT4_GLUEBI is not defined.
+ **/
+
+BOOLEAN IsLEVerityUseExt4Gluebi (VOID);
 
 #endif
