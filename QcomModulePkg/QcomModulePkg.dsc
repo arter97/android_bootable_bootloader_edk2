@@ -52,7 +52,6 @@
   MemoryAllocationLib|MdePkg/Library/UefiMemoryAllocationLib/UefiMemoryAllocationLib.inf
   BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
   BaseMemoryLibOptDxe|MdePkg/Library/BaseMemoryLibOptDxe/BaseMemoryLibOptDxe.inf
-  BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
   PrintLib|MdePkg/Library/BasePrintLib/BasePrintLib.inf
   CacheMaintenanceLib|ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.inf
   IoLib|MdePkg/Library/BaseIoLibIntrinsic/BaseIoLibIntrinsic.inf
@@ -112,6 +111,9 @@
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
+  !if $(VERITY_LE_USE_EXT4_GLUEBI)
+      GCC:*_*_*_CC_FLAGS = -DVERITY_LE_USE_EXT4_GLUEBI
+  !endif
   !if $(USER_BUILD_VARIANT) == 0
       GCC:*_*_*_CC_FLAGS = -DENABLE_UPDATE_PARTITIONS_CMDS -DENABLE_BOOT_CMD -DENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS
   !else
@@ -164,7 +166,6 @@
 
 	QcomModulePkg/Application/LinuxLoader/LinuxLoader.inf {
 		<LibraryClasses>
-			BaseMemoryLib|MdePkg/Library/BaseMemoryLib/BaseMemoryLib.inf
 			DxeServicesTableLib|MdePkg/Library/DxeServicesTableLib/DxeServicesTableLib.inf
 			UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
 			UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf

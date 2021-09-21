@@ -1,6 +1,6 @@
 /** @file LECmdLine.h
  *
- * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018, 2021 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -55,5 +55,14 @@ GetLEVerityCmdLine (CONST CHAR8 *SourceCmdLine,
    @retval      FALSE  If VERITY_LE is not defined.
  **/
 BOOLEAN IsLEVerity (VOID);
+
+/**
+   This function checks if VERITY_LE_USE_EXT4_GLUEBI is defined or not.
+   @param[in]   VOID   VOID
+   @retval      TRUE   If VERITY_LE_USE_EXT4_GLUEBI is defined.
+   @retval      FALSE  If VERITY_LE_USE_EXT4_GLUEBI is not defined.
+ **/
+
+BOOLEAN IsLEVerityUseExt4Gluebi (VOID);
 
 #endif
