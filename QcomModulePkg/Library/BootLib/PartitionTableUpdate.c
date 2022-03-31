@@ -78,6 +78,8 @@ STATIC UINT32 MaxLuns;
 STATIC UINT32 PartitionCount;
 STATIC BOOLEAN FirstBoot;
 STATIC struct PartitionEntry PtnEntriesBak[MAX_NUM_PARTITIONS];
+STATIC BOOLEAN IsMultiSlot_ABC;
+STATIC UINT32 SlotCount;
 
 STATIC struct BootPartsLinkedList *HeadNode;
 STATIC EFI_STATUS
@@ -534,6 +536,7 @@ STATIC EFI_STATUS GetMultiSlotPartsList (VOID)
 
   for (i = 0; i < PartitionCount; i++) {
     SearchString = PtnEntries[i].PartEntry.PartitionName;
+    UINT32 MatchCount = 0;
     if (!SearchString[0])
       continue;
 
@@ -548,7 +551,16 @@ STATIC EFI_STATUS GetMultiSlotPartsList (VOID)
           !StrnCmp (PtnEntries[j].PartEntry.PartitionName,
           SearchString, Len - 1) &&
           (StrStr (SearchString, (CONST CHAR16 *)L"_a") ||
-          StrStr (SearchString, (CONST CHAR16 *)L"_b"))) {
+           StrStr (SearchString, (CONST CHAR16 *)L"_b") ||
+          (IsMultiSlot_ABC &&
+            StrStr (SearchString, (CONST CHAR16 *)L"_c")))) {
+          MatchCount++;
+          if (MatchCount == (SlotCount - 1)) {
+            break;
+          }
+      }
+    }
+    if (MatchCount == (SlotCount - 1)) {
         TempNode = AllocateZeroPool (sizeof (struct BootPartsLinkedList));
         if (TempNode) {
           /*Skip _a/_b from partition name*/
@@ -556,42 +568,31 @@ STATIC EFI_STATUS GetMultiSlotPartsList (VOID)
                     SearchString, Len - 2);
           TempNode->Next = HeadNode;
           HeadNode = TempNode;
-        } else {
+         } else {
           DEBUG ((EFI_D_ERROR,
                   "Unable to Allocate Memory for MultiSlot Partition list\n"));
           return EFI_OUT_OF_RESOURCES;
         }
-        break;
-      }
-    }
+   }
   }
   return EFI_SUCCESS;
 }
 
 STATIC VOID
-SwitchPtnSlots (CONST CHAR16 *SetActive)
+SwitchPtnSlots (CONST CHAR16 *SetActive, CONST CHAR16 *SetInactive )
 {
   UINT32 i;
   struct PartitionEntry *PtnCurrent = NULL;
   struct PartitionEntry *PtnNew = NULL;
   CHAR16 CurSlot[BOOT_PART_SIZE];
+  CHAR16 TempPartitionName[BOOT_PART_SIZE];
   CHAR16 NewSlot[BOOT_PART_SIZE];
-  CHAR16 SetInactive[MAX_SLOT_SUFFIX_SZ];
   UINT32 UfsBootLun = 0;
   BOOLEAN UfsGet = TRUE;
   BOOLEAN UfsSet = FALSE;
   struct BootPartsLinkedList *TempNode = NULL;
   EFI_STATUS Status;
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
-
-  /* Create the partition name string for active and non active slots*/
-  if (!StrnCmp (SetActive, (CONST CHAR16 *)L"_a",
-                StrLen ((CONST CHAR16 *)L"_a")))
-    StrnCpyS (SetInactive, MAX_SLOT_SUFFIX_SZ, (CONST CHAR16 *)L"_b",
-              StrLen ((CONST CHAR16 *)L"_b"));
-  else
-    StrnCpyS (SetInactive, MAX_SLOT_SUFFIX_SZ, (CONST CHAR16 *)L"_a",
-              StrLen ((CONST CHAR16 *)L"_a"));
 
   if (!HeadNode) {
     Status = GetMultiSlotPartsList ();
@@ -616,11 +617,14 @@ SwitchPtnSlots (CONST CHAR16 *SetActive)
     /* Find the pointer to partition table entry for active and non-active
      * slots*/
     for (i = 0; i < PartitionCount; i++) {
-      if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, CurSlot,
-                    StrLen (CurSlot))) {
+      StrnCpyS (TempPartitionName,
+                 BOOT_PART_SIZE, PtnEntries[i].PartEntry.PartitionName,
+                  StrLen (PtnEntries[i].PartEntry.PartitionName));
+      if ((StrLen (TempPartitionName) == StrLen (CurSlot)) &&
+             !StrnCmp (TempPartitionName, CurSlot, 1 + StrLen (CurSlot))) {
         PtnCurrent = &PtnEntries[i];
-      } else if (!StrnCmp (PtnEntries[i].PartEntry.PartitionName, NewSlot,
-                           StrLen (NewSlot))) {
+      } else if ((StrLen (TempPartitionName) == StrLen (CurSlot)) &&
+                  !StrnCmp (TempPartitionName, NewSlot, 1 + StrLen (NewSlot))) {
         PtnNew = &PtnEntries[i];
       }
     }
@@ -739,19 +743,30 @@ BOOLEAN
 PartitionHasMultiSlot (CONST CHAR16 *Pname)
 {
   UINT32 i;
-  UINT32 SlotCount = 0;
+  UINT32 TempSlotCount = 0;
   UINT32 Len = StrLen (Pname);
 
   for (i = 0; i < PartitionCount; i++) {
     if (!(StrnCmp (PtnEntries[i].PartEntry.PartitionName, Pname, Len))) {
       if (PtnEntries[i].PartEntry.PartitionName[Len] == L'_' &&
           (PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'a' ||
-           PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'b'))
-        if (++SlotCount > MIN_SLOTS) {
-          return TRUE;
-        }
+           PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'b' ||
+           PtnEntries[i].PartEntry.PartitionName[Len + 1] == L'c'))
+                        ++TempSlotCount;
     }
   }
+
+  if (TempSlotCount > MAX_SLOTS) {
+     DEBUG ((EFI_D_ERROR,
+             "Slot count is invalid, might lead to unusual behaviour\n"));
+  }
+
+  SlotCount = TempSlotCount;
+  if (SlotCount > MIN_SLOTS) {
+    IsMultiSlot_ABC = (TempSlotCount == MAX_SLOTS);
+    return TRUE;
+  }
+
   return FALSE;
 }
 
@@ -1227,20 +1242,12 @@ STATIC struct PartitionEntry *
 GetBootPartitionEntry (Slot *BootSlot)
 {
   INT32 Index = INVALID_PTN;
+  CHAR16 PartitionName[MAX_GPT_NAME_SIZE] = L"boot";
 
-  if (StrnCmp ((CONST CHAR16 *)L"_a", BootSlot->Suffix,
-               StrLen (BootSlot->Suffix)) == 0) {
-    Index = GetPartitionIndex ((CHAR16 *)L"boot_a");
-  } else if (StrnCmp ((CONST CHAR16 *)L"_b", BootSlot->Suffix,
-                      StrLen (BootSlot->Suffix)) == 0) {
-    Index = GetPartitionIndex ((CHAR16 *)L"boot_b");
-  } else {
-    DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition "
-                         "entry for slot %s\n",
-            BootSlot->Suffix));
-    return NULL;
-  }
-
+  StrnCatS (PartitionName, MAX_GPT_NAME_SIZE,
+            BootSlot->Suffix,
+            StrLen (BootSlot->Suffix));
+  Index = GetPartitionIndex (PartitionName);
   if (Index == INVALID_PTN) {
     DEBUG ((EFI_D_ERROR, "GetBootPartitionEntry: No boot partition entry "
                          "for slot %s, invalid index\n",
@@ -1298,7 +1305,7 @@ STATIC EFI_STATUS
 GetActiveSlot (Slot *ActiveSlot)
 {
   EFI_STATUS Status = EFI_SUCCESS;
-  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  Slot Slots[] = {{L"_a"}, {L"_b"}, {L"_c"}};
   UINT64 Priority = 0;
 
   if (ActiveSlot == NULL) {
@@ -1306,7 +1313,7 @@ GetActiveSlot (Slot *ActiveSlot)
     return EFI_INVALID_PARAMETER;
   }
 
-  for (UINTN SlotIndex = 0; SlotIndex < ARRAY_SIZE (Slots); SlotIndex++) {
+  for (UINTN SlotIndex = 0; SlotIndex < SlotCount ; SlotIndex++) {
     struct PartitionEntry *BootPartition =
         GetBootPartitionEntry (&Slots[SlotIndex]);
     UINT64 BootPriority = 0;
@@ -1391,12 +1398,13 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
 {
   EFI_STATUS Status = EFI_SUCCESS;
   Slot CurrentSlot = {{0}};
-  Slot *AlternateSlot = NULL;
-  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  Slot Slots[] = {{L"_a"}, {L"_b"}, {L"_c"}};
   BOOLEAN UfsGet = TRUE;
   BOOLEAN UfsSet = FALSE;
   UINT32 UfsBootLun = 0;
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
+  UINT32 TempSlotIndex;
+
   struct PartitionEntry *BootEntry = NULL;
 
   if (NewSlot == NULL) {
@@ -1405,13 +1413,6 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
   }
 
   GUARD (GetActiveSlot (&CurrentSlot));
-
-  if (StrnCmp (NewSlot->Suffix, Slots[0].Suffix, StrLen (Slots[0].Suffix)) ==
-      0) {
-    AlternateSlot = &Slots[1];
-  } else {
-    AlternateSlot = &Slots[0];
-  }
 
   BootEntry = GetBootPartitionEntry (NewSlot);
   if (BootEntry == NULL) {
@@ -1432,18 +1433,23 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
   }
 
   /* Reduce the priority and clear the active flag for alternate slot*/
-  BootEntry = GetBootPartitionEntry (AlternateSlot);
-  if (BootEntry == NULL) {
-    DEBUG ((EFI_D_ERROR, "SetActiveSlot: No boot partition entry for slot %s\n",
-            AlternateSlot->Suffix));
-    return EFI_NOT_FOUND;
+  for (TempSlotIndex = 0; TempSlotIndex < SlotCount; TempSlotIndex++) {
+    if (StrnCmp (NewSlot->Suffix, Slots[TempSlotIndex].Suffix,
+        StrLen (Slots[TempSlotIndex].Suffix))) {
+      BootEntry = GetBootPartitionEntry (&Slots[TempSlotIndex]);
+      if (BootEntry == NULL) {
+        DEBUG ((EFI_D_ERROR,
+                   "SetActiveSlot: No boot partition entry for slot %s\n",
+                      Slots[TempSlotIndex].Suffix));
+        return EFI_NOT_FOUND;
+      }
+
+      BootEntry->PartEntry.Attributes &=
+             (~PART_ATT_PRIORITY_VAL & ~PART_ATT_ACTIVE_VAL);
+      BootEntry->PartEntry.Attributes |=
+             (((UINT64)MAX_PRIORITY - 1) << PART_ATT_PRIORITY_BIT);
+    }
   }
-
-  BootEntry->PartEntry.Attributes &=
-      (~PART_ATT_PRIORITY_VAL & ~PART_ATT_ACTIVE_VAL);
-  BootEntry->PartEntry.Attributes |=
-      (((UINT64)MAX_PRIORITY - 1) << PART_ATT_PRIORITY_BIT);
-
   UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
   if (StrnCmp (CurrentSlot.Suffix, NewSlot->Suffix,
                StrLen (CurrentSlot.Suffix)) == 0) {
@@ -1471,9 +1477,9 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
       }
     }
   } else {
-    DEBUG ((EFI_D_INFO, "Alternate slot %s, New slot %s\n",
-            AlternateSlot->Suffix, NewSlot->Suffix));
-    SwitchPtnSlots (NewSlot->Suffix);
+    DEBUG ((EFI_D_INFO, "New slot %s\n",
+            NewSlot->Suffix));
+    SwitchPtnSlots (NewSlot->Suffix, CurrentSlot.Suffix);
     MarkPtnActive (NewSlot->Suffix);
   }
   return EFI_SUCCESS;
@@ -1485,9 +1491,10 @@ EFI_STATUS HandleActiveSlotUnbootable (VOID)
   struct PartitionEntry *BootEntry = NULL;
   Slot ActiveSlot = {{0}};
   Slot *AlternateSlot = NULL;
-  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  Slot Slots[] = {{L"_a"}, {L"_b"}, {L"_c"}};
   UINT64 Unbootable = 0;
   UINT64 BootSuccess = 0;
+  UINT32 TempSlotIndex = 0;
 
   /* Mark current Slot as unbootable */
   GUARD (GetActiveSlot (&ActiveSlot));
@@ -1507,13 +1514,21 @@ EFI_STATUS HandleActiveSlotUnbootable (VOID)
         (PART_ATT_UNBOOTABLE_VAL) & (~PART_ATT_SUCCESSFUL_VAL);
     UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
   }
-
-  if (StrnCmp (ActiveSlot.Suffix, Slots[0].Suffix, StrLen (Slots[0].Suffix)) ==
-      0) {
-    AlternateSlot = &Slots[1];
-  } else {
-    AlternateSlot = &Slots[0];
+  /* AlternateSlot will always be the one which is next to active slot */
+  for ( TempSlotIndex = 0; TempSlotIndex < SlotCount; TempSlotIndex++) {
+    if (StrnCmp (ActiveSlot.Suffix, Slots[TempSlotIndex].Suffix,
+                        StrLen (Slots[TempSlotIndex].Suffix)) == 0) {
+      AlternateSlot = &Slots[((TempSlotIndex + 1) % SlotCount)];
+      break;
+    }
   }
+
+  if ( AlternateSlot == NULL ) {
+     DEBUG ((EFI_D_ERROR, "Alternate slot not Found"));
+     return EFI_NOT_FOUND;
+   }
+   DEBUG ((EFI_D_VERBOSE, "Alternate slot is %s\n",
+          AlternateSlot->Suffix));
 
   /* Validate Aternate Slot is bootable */
   BootEntry = GetBootPartitionEntry (AlternateSlot);
