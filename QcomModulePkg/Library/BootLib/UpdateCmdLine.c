@@ -620,6 +620,8 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
 
   if (Param->MultiSlotBoot &&
      !IsBootDevImage ()) {
+    UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
+                        Param->SlotSuffixAscii);
     if (IsLEVariant ()) {
       INT32 StrLen = 0;
       StrLen = AsciiStrLen (SystemdSlotEnv);
@@ -633,8 +635,6 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
         AsciiStrCatS (Dst, MaxCmdLineLen, Src);
       }
 
-      UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
-                        Param->SlotSuffixAscii);
       if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
         Src = Param->SlotSuffixAscii;
         AsciiStrCatS (Dst, MaxCmdLineLen, Src);
