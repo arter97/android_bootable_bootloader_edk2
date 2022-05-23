@@ -25,6 +25,38 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following
+ * disclaimer in the documentation and/or other materials provided
+ * with the distribution.
+ *
+ *     * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ * contributors may be used to endorse or promote products derived
+ * from this software without specific prior written permission.
+
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef __PARTITION_TABLE_H__
@@ -48,6 +80,13 @@ typedef enum {
   PARTITION_GUID,
   PARTITION_ALL,
 } UPDATE_TYPE;
+
+typedef enum {
+  PTN_ENTRIES_TO_MISC = 1,
+  PTN_ENTRIES_FROM_MISC,
+} NANDAB_UPDATE_TYPE;
+
+#define NANDAB_MAX_SLOTNAME_LEN 7
 
 #define PARTITION_ATTRIBUTES_MASK 0x1
 #define PARTITION_GUID_MASK 0x2
@@ -196,6 +235,22 @@ struct BootPartsLinkedList {
   struct BootPartsLinkedList *Next;
 };
 
+
+/*
+  CHAR8 priority     : 2;
+  CHAR8 active       : 1;
+  CHAR8 try_count    : 3;
+  CHAR8 boot_success : 1;
+  CHAR8 unbootable   : 1;
+*/
+typedef struct NandABPtnHeader {
+  CHAR8 Attributes;
+  CHAR16 SlotName[NANDAB_MAX_SLOTNAME_LEN];
+} NandABPtnHeader;
+typedef struct NandABAttr {
+  NandABPtnHeader Slots[MAX_SLOTS];
+} NandABAttr;
+
 EFI_STATUS
 UpdatePartitionTable (UINT8 *GptImage,
                       UINT32 Sz,
@@ -210,6 +265,7 @@ BOOLEAN
 PartitionHasMultiSlot (CONST CHAR16 *Pname);
 EFI_STATUS EnumeratePartitions (VOID);
 VOID UpdatePartitionEntries (VOID);
+EFI_STATUS NandABUpdatePartition (UINT32 UpdateType);
 VOID UpdatePartitionAttributes (UINT32 UpdateType);
 VOID FindPtnActiveSlot (VOID);
 EFI_STATUS

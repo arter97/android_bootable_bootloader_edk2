@@ -25,6 +25,39 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following
+ * disclaimer in the documentation and/or other materials provided
+ * with the distribution.
+ *
+ *     * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+ * contributors may be used to endorse or promote products derived
+ * from this software without specific prior written permission.
+
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 #include "PartitionTableUpdate.h"
 #include "AutoGen.h"
@@ -130,6 +163,9 @@ VOID UpdatePartitionEntries (VOID)
       gBS->CopyMem ((&PtnEntries[Index]), PartEntry, sizeof (PartEntry[0]));
       PtnEntries[Index].lun = i;
     }
+  }
+  if (NAND == CheckRootDeviceType ()) {
+    NandABUpdatePartition (PTN_ENTRIES_FROM_MISC);
   }
   /* Back up the ptn entries */
   gBS->CopyMem (PtnEntriesBak, PtnEntries, sizeof (PtnEntries));
@@ -262,6 +298,12 @@ VOID UpdatePartitionAttributes (UINT32 UpdateType)
       Status = GetStorageHandle (NO_LUN, BlockIoHandle, &MaxHandles);
     } else if (!AsciiStrnCmp (BootDeviceType, "UFS", AsciiStrLen ("UFS"))) {
       Status = GetStorageHandle (Lun, BlockIoHandle, &MaxHandles);
+    } else if (!AsciiStrnCmp (BootDeviceType, "NAND", AsciiStrLen ("NAND"))) {
+      if (UpdateType & PARTITION_ATTRIBUTES_MASK) {
+         NandABUpdatePartition (PTN_ENTRIES_TO_MISC);
+         gBS->CopyMem (PtnEntriesBak, PtnEntries, sizeof (PtnEntries));
+      }
+      return;
     } else {
       DEBUG ((EFI_D_ERROR, "Unsupported  boot device type\n"));
       return;
@@ -1647,7 +1689,8 @@ FindBootableSlot (Slot *BootableSlot)
   }
 
   /* Validate slot suffix and partition guids */
-  if (Status == EFI_SUCCESS) {
+  if (Status == EFI_SUCCESS &&
+      NAND != CheckRootDeviceType ()) {
     GUARD_OUT (ValidateSlotGuids (BootableSlot));
   }
   MarkPtnActive (BootableSlot->Suffix);
@@ -1822,4 +1865,68 @@ LoadAndValidateDtboImg (BootInfo *Info,
   }
 
   return TRUE;
+}
+
+EFI_STATUS NandABUpdatePartition (UINT32 UpdateType)
+{
+  Slot Slots[] = {{L"_a"}, {L"_b"}};
+  NandABAttr *NandAttr = NULL;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  EFI_STATUS Status;
+  UINT32 PageSize;
+  size_t Size1 = sizeof (PtnEntries[0].PartEntry.PartitionName);
+  size_t Size2 = sizeof (NandAttr->Slots[0].SlotName);
+
+  GetPageSize (&PageSize);
+  Status = GetNandMiscPartiGuid (&Ptype);
+  if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+
+  Status = ReadFromPartition (&Ptype, (VOID **)&NandAttr, PageSize);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Error Reading from misc partition: %r\n", Status));
+    return Status;
+  }
+
+  if (!NandAttr) {
+    DEBUG ((EFI_D_ERROR, "Error in loading Data from misc partition\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  for (UINTN SlotIndex = 0; SlotIndex < ARRAY_SIZE (Slots); SlotIndex++) {
+    struct PartitionEntry *BootPartition =
+                      GetBootPartitionEntry (&Slots[SlotIndex]);
+    if (BootPartition == NULL) {
+      DEBUG ((EFI_D_ERROR, "GetActiveSlot: No boot partition "
+                    "entry for slot %s\n", Slots[SlotIndex].Suffix));
+      Status = EFI_NOT_FOUND;
+      goto Exit;
+    }
+
+    if (UpdateType == PTN_ENTRIES_TO_MISC) {
+      NandAttr->Slots[SlotIndex].Attributes =
+         (CHAR8)((BootPartition->PartEntry.Attributes >>
+                                 PART_ATT_PRIORITY_BIT)&0xff);
+      StrnCpyS (NandAttr->Slots[SlotIndex].SlotName, Size2 ,
+                    (BootPartition->PartEntry.PartitionName), Size1);
+    } else if (!StrnCmp (BootPartition->PartEntry.PartitionName,
+                       NandAttr->Slots[SlotIndex].SlotName, Size2)) {
+        BootPartition->PartEntry.Attributes =
+               (((UINT64)((NandAttr->Slots[SlotIndex].Attributes)&0xff)) <<
+                                                       PART_ATT_PRIORITY_BIT);
+    }
+  }
+
+  if (UpdateType == PTN_ENTRIES_TO_MISC) {
+    WriteToPartition (&Ptype, NandAttr, sizeof (struct NandABAttr));
+  }
+
+Exit:
+  if (NandAttr) {
+    FreePool (NandAttr);
+    NandAttr = NULL;
+  }
+
+  return Status;
 }

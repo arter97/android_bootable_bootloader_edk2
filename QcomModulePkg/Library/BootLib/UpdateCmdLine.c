@@ -28,7 +28,6 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
  **/
 /*
   * Changes from Qualcomm Innovation Center are provided under the following
@@ -102,6 +101,8 @@ STATIC CONST CHAR8 *LogLevel = " quite";
 STATIC CONST CHAR8 *BatteryChgPause = " androidboot.mode=charger";
 STATIC CONST CHAR8 *MdtpActiveFlag = " mdtp";
 STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
+STATIC CHAR8 SystemdSlotEnv[] = " systemd.setenv=\"SLOT_SUFFIX=_a\"";
+STATIC CONST CHAR8 *NoPasr = " mem_offline.nopasr=1";
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
@@ -373,7 +374,8 @@ GetSystemPath (CHAR8 **SysPath, BootInfo *Info)
   }
 
   /* Append slot info for A/B Variant */
-  if (Info->MultiSlotBoot) {
+  if (Info->MultiSlotBoot &&
+      NAND != CheckRootDeviceType ()) {
      StrnCatS (PartitionName, MAX_GPT_NAME_SIZE, CurSlot.Suffix,
             StrLen (CurSlot.Suffix));
   }
@@ -404,10 +406,17 @@ GetSystemPath (CHAR8 **SysPath, BootInfo *Info)
       // The gluebi device that is to be passed to "root=" will be the first one
       // after all "regular" mtd devices have been populated.
       UINT32 PartitionCount = 0;
+      UINT32 MtdBlkIndex = 0;
       GetPartitionCount (&PartitionCount);
+      if (Info->MultiSlotBoot &&
+         (StrnCmp ((CONST CHAR16 *)L"_b", CurSlot.Suffix,
+          StrLen (CurSlot.Suffix)) == 0))
+         MtdBlkIndex = PartitionCount;
+      else
+         MtdBlkIndex = PartitionCount - 1;
       AsciiSPrint (*SysPath, MAX_PATH_SIZE,
                    " rootfstype=squashfs root=/dev/mtdblock%d ubi.mtd=%d",
-                   (PartitionCount - 1), (Index - 1));
+                   MtdBlkIndex, (Index - 1));
     } else {
       if (IsLEVerity () &&
           !Info->BootIntoRecovery &&
@@ -612,26 +621,34 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
 
   if (Param->MultiSlotBoot &&
      !IsBootDevImage ()) {
-     /* Slot suffix */
-    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
-      Src = Param->AndroidSlotSuffix;
-      AsciiStrCatS (Dst, MaxCmdLineLen, Src);
-    }
-
     UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
-                          Param->SlotSuffixAscii);
-    if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
-      Src = Param->SlotSuffixAscii;
+                        Param->SlotSuffixAscii);
+    if (IsLEVariant ()) {
+      INT32 StrLen = 0;
+      StrLen = AsciiStrLen (SystemdSlotEnv);
+      SystemdSlotEnv[StrLen - 2] = Param->SlotSuffixAscii[1];
+      Src = Param->SystemdSlotEnv;
       AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     } else {
-      BootConfigFlag = IsAndroidBootParam (Param->AndroidSlotSuffix,
-                              AsciiStrLen (Param->AndroidSlotSuffix),
-                                       Param->HeaderVersion);
-      AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
-                     Param->SlotSuffixAscii,
+     /* Slot suffix */
+      if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+        Src = Param->AndroidSlotSuffix;
+        AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      }
+
+      if (Param->HeaderVersion <= BOOT_HEADER_VERSION_THREE) {
+        Src = Param->SlotSuffixAscii;
+        AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+      } else {
+        BootConfigFlag = IsAndroidBootParam (Param->AndroidSlotSuffix,
+                            AsciiStrLen (Param->AndroidSlotSuffix),
+                                      Param->HeaderVersion);
+        AddtoBootConfigList (BootConfigFlag, Param->AndroidSlotSuffix,
+                   Param->SlotSuffixAscii,
                      BootConfigListHead,
                      AsciiStrLen (Param->AndroidSlotSuffix),
                      AsciiStrLen (Param->SlotSuffixAscii));
+      }
     }
   }
 
@@ -695,6 +712,9 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
     Src = MemHpState;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
     Src = MovableNode;
+    AsciiStrCatS (Dst, MaxCmdLineLen, Src);
+  } else if (Param->NoPasr != NULL) {
+    Src = Param->NoPasr;
     AsciiStrCatS (Dst, MaxCmdLineLen, Src);
   }
 
@@ -1092,12 +1112,21 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
   if (MultiSlotBoot &&
      !IsBootDevImage ()) {
+    if (IsLEVariant ()) {
+      ParamLen = AsciiStrLen (SystemdSlotEnv);
+      BootConfigFlag = IsAndroidBootParam (SystemdSlotEnv,
+                                    ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, SystemdSlotEnv, NULL,
+                                BootConfigListHead, ParamLen, 0);
+    } else {
     /* Add additional length for slot suffix */
-    ParamLen = AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
-    BootConfigFlag = IsAndroidBootParam (AndroidSlotSuffix,
+      ParamLen = AsciiStrLen (AndroidSlotSuffix) + MAX_SLOT_SUFFIX_SZ;
+      BootConfigFlag = IsAndroidBootParam (AndroidSlotSuffix,
                                ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen,
                                          BootConfigLen);
+    }
   }
 
   if ((IsBuildAsSystemRootImage () &&
@@ -1207,30 +1236,38 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   Status = GetMemoryLimit (fdt, MemOffAmt);
   /* Don't override "mem" argument if coded into boot image */
   if (Status == EFI_SUCCESS &&
-      HaveCmdLine &&
-      !AsciiStrStr (CmdLine, "mem=")) {
-    ParamLen = AsciiStrLen (MemOff);
-    BootConfigFlag = IsAndroidBootParam (MemOff, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MemOff, NULL, BootConfigListHead,
+      HaveCmdLine) {
+    if (AsciiStrStr (CmdLine, MemOff)) {
+      ParamLen = AsciiStrLen (NoPasr);
+      BootConfigFlag = IsAndroidBootParam (NoPasr, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      Param.NoPasr = NoPasr;
+      Param.MemOffAmt = NULL;
+    } else {
+      ParamLen = AsciiStrLen (MemOff);
+      BootConfigFlag = IsAndroidBootParam (MemOff, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MemOff, NULL, BootConfigListHead,
                                                              ParamLen, 0);
-    ParamLen = AsciiStrLen (MemOffAmt);
-    BootConfigFlag = IsAndroidBootParam (MemOffAmt, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MemOffAmt, NULL,
-               BootConfigListHead, ParamLen, 0);
-    ParamLen = AsciiStrLen (MemHpState);
-    BootConfigFlag = IsAndroidBootParam (MemHpState, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MemHpState, NULL,
-               BootConfigListHead, ParamLen, 0);
-    ParamLen = AsciiStrLen (MovableNode);
-    BootConfigFlag = IsAndroidBootParam (MovableNode, ParamLen, HeaderVersion);
-    ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
-    AddtoBootConfigList (BootConfigFlag, MovableNode, NULL,
-               BootConfigListHead, ParamLen, 0);
+      ParamLen = AsciiStrLen (MemOffAmt);
+      BootConfigFlag = IsAndroidBootParam (MemOffAmt, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MemOffAmt, NULL,
+                 BootConfigListHead, ParamLen, 0);
+      ParamLen = AsciiStrLen (MemHpState);
+      BootConfigFlag = IsAndroidBootParam (MemHpState, ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MemHpState, NULL,
+                 BootConfigListHead, ParamLen, 0);
+      ParamLen = AsciiStrLen (MovableNode);
+      BootConfigFlag = IsAndroidBootParam (MovableNode,
+                 ParamLen, HeaderVersion);
+      ADD_PARAM_LEN (BootConfigFlag, ParamLen, CmdLineLen, BootConfigLen);
+      AddtoBootConfigList (BootConfigFlag, MovableNode, NULL,
+                 BootConfigListHead, ParamLen, 0);
 
-    Param.MemOffAmt = MemOffAmt;
+      Param.MemOffAmt = MemOffAmt;
+    }
   } else {
     Param.MemOffAmt = NULL;
   }
@@ -1268,6 +1305,7 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   Param.DtbIdxStr = DtbIdxStr;
   Param.LEVerityCmdLine = LEVerityCmdLine;
   Param.HeaderVersion = HeaderVersion;
+  Param.SystemdSlotEnv = SystemdSlotEnv;
 
   Status = UpdateCmdLineParams (&Param, FinalCmdLine);
   if (Status != EFI_SUCCESS) {
