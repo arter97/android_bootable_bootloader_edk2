@@ -26,6 +26,42 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+/* Changes from Qualcomm Innovation Center are provided under the following
+ * license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *    * Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ *
+ *    * Redistributions in binary form must reproduce the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer in the documentation and/or other materials provided
+ *      with the distribution.
+ *
+ *    * Neither the name of Qualcomm Innovation Center, Inc. nor the names of
+ *      its contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include "VerifiedBoot.h"
 #include "BootLinux.h"
 #include "BootImage.h"
@@ -42,6 +78,8 @@ STATIC CONST CHAR8 *KeymasterLoadState = " androidboot.keymaster=1";
 STATIC CONST CHAR8 *DmVerityCmd = " root=/dev/dm-0 dm=\"system none ro,0 1 "
                                     "android-verity";
 STATIC CONST CHAR8 *Space = " ";
+
+STATIC BOOLEAN KeymasterEnabled = TRUE;
 
 #define MAX_NUM_REQ_PARTITION    8
 #define MAX_PROPERTY_SIZE        10
@@ -1367,53 +1405,61 @@ LoadImageAndAuthVB2 (BootInfo *Info)
   GUARD_OUT (AppendVBCommonCmdLine (Info));
   GUARD_OUT (AppendVBCmdLine (Info, SlotData->cmdline));
 
-  /* Set Rot & Boot State*/
-  Data.Color = Info->BootState;
-  Data. IsUnlocked = AllowVerificationError;
-  Data.PublicKeyLength = UserData->PublicKeyLen;
-  Data.PublicKey = UserData->PublicKey;
-
-  GUARD_OUT (KeyMasterGetDateSupport (&DateSupport));
-
-  if (BootImgHdr->header_version >= BOOT_HEADER_VERSION_THREE) {
-    OSVersion = ((boot_img_hdr_v3 *)(ImageBuffer))->os_version;
-  } else {
-    OSVersion = BootImgHdr->os_version;
+  Status = Info->VbIntf->VBIsKeymasterEnabled (Info->VbIntf, &KeymasterEnabled);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Checking Keymaster Enablement failed %r\n", Status));
+    return Status;
   }
 
-  /* Send date value in security patch only when KM TA supports it and the
-   * property is available in vbmeta data, send the old value in other cases
-  */
-  DEBUG ((EFI_D_VERBOSE, "DateSupport: %d\n", DateSupport));
-  if (DateSupport) {
-    BootSecurityLevel = avb_property_lookup (
-                           SlotData->vbmeta_images[0].vbmeta_data,
-                           SlotData->vbmeta_images[0].vbmeta_size,
-                           "com.android.build.boot.security_patch",
-                           0, &BootSecurityLevelSize);
+  if (KeymasterEnabled) {
+    /* Set Rot & Boot State*/
+    Data.Color = Info->BootState;
+    Data. IsUnlocked = AllowVerificationError;
+    Data.PublicKeyLength = UserData->PublicKeyLen;
+    Data.PublicKey = UserData->PublicKey;
 
-    if (BootSecurityLevel != NULL &&
-        BootSecurityLevelSize == MAX_PROPERTY_SIZE) {
-      Data.SystemSecurityLevel = ParseBootSecurityLevel (BootSecurityLevel,
-                                                         BootSecurityLevelSize);
-      if (Data.SystemSecurityLevel < 0) {
-        DEBUG ((EFI_D_ERROR, "System security patch level format invalid\n"));
-        Status = EFI_INVALID_PARAMETER;
-        goto out;
+    GUARD_OUT (KeyMasterGetDateSupport (&DateSupport));
+
+    if (BootImgHdr->header_version >= BOOT_HEADER_VERSION_THREE) {
+      OSVersion = ((boot_img_hdr_v3 *)(ImageBuffer))->os_version;
+    } else {
+      OSVersion = BootImgHdr->os_version;
+    }
+
+    /* Send date value in security patch only when KM TA supports it and the
+    * property is available in vbmeta data, send the old value in other cases
+    */
+    DEBUG ((EFI_D_VERBOSE, "DateSupport: %d\n", DateSupport));
+    if (DateSupport) {
+      BootSecurityLevel = avb_property_lookup (
+                            SlotData->vbmeta_images[0].vbmeta_data,
+                            SlotData->vbmeta_images[0].vbmeta_size,
+                            "com.android.build.boot.security_patch",
+                            0, &BootSecurityLevelSize);
+
+      if (BootSecurityLevel != NULL &&
+          BootSecurityLevelSize == MAX_PROPERTY_SIZE) {
+        Data.SystemSecurityLevel = ParseBootSecurityLevel (BootSecurityLevel,
+                                                        BootSecurityLevelSize);
+        if (Data.SystemSecurityLevel < 0) {
+          DEBUG ((EFI_D_ERROR, "System security patch level format invalid\n"));
+          Status = EFI_INVALID_PARAMETER;
+          goto out;
+        }
+      }
+      else {
+        Data.SystemSecurityLevel = (OSVersion & 0x7FF);
       }
     }
     else {
       Data.SystemSecurityLevel = (OSVersion & 0x7FF);
     }
-  }
-  else {
-    Data.SystemSecurityLevel = (OSVersion & 0x7FF);
-  }
-  Data.SystemVersion = (OSVersion & 0xFFFFF800) >> 11;
+    Data.SystemVersion = (OSVersion & 0xFFFFF800) >> 11;
 
-  GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
-  ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
-  GUARD_OUT (SetVerifiedBootHash ((CONST CHAR8 *)&Digest, sizeof(Digest)));
+    GUARD_OUT (KeyMasterSetRotAndBootState (&Data));
+    ComputeVbMetaDigest (SlotData, (CHAR8 *)&Digest);
+    GUARD_OUT (SetVerifiedBootHash ( (CONST CHAR8 *)&Digest, sizeof (Digest)));
+  }
   DEBUG ((EFI_D_INFO, "VB2: Authenticate complete! boot state is: %a\n",
           VbSn[Info->BootState].name));
 
@@ -1769,7 +1815,9 @@ LoadImageAndAuth (BootInfo *Info)
   if (AVBVersion != AVB_LE) {
     DisplayVerifiedBootScreen (Info);
     DEBUG ((EFI_D_VERBOSE, "Sending Milestone Call\n"));
-    Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
+    if (KeymasterEnabled) {
+      Status = Info->VbIntf->VBSendMilestone (Info->VbIntf);
+    }
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "Error sending milestone call to TZ\n"));
       return Status;
