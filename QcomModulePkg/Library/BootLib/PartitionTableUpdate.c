@@ -78,7 +78,7 @@ STATIC UINT32 MaxLuns;
 STATIC UINT32 PartitionCount;
 STATIC BOOLEAN FirstBoot;
 STATIC struct PartitionEntry PtnEntriesBak[MAX_NUM_PARTITIONS];
-STATIC BOOLEAN IsMultiSlot_ABC;
+#define IsMultiSlot_ABC (SlotCount == 3)
 STATIC UINT32 SlotCount;
 
 STATIC struct BootPartsLinkedList *HeadNode;
@@ -556,24 +556,22 @@ STATIC EFI_STATUS GetMultiSlotPartsList (VOID)
             StrStr (SearchString, (CONST CHAR16 *)L"_c")))) {
           MatchCount++;
           if (MatchCount == (SlotCount - 1)) {
+            TempNode = AllocateZeroPool (sizeof (struct BootPartsLinkedList));
+            if (TempNode) {
+              /*Skip _a/_b from partition name*/
+              StrnCpyS (TempNode->PartName, sizeof (TempNode->PartName),
+                 SearchString, Len - 2);
+              TempNode->Next = HeadNode;
+              HeadNode = TempNode;
+            } else {
+              DEBUG ((EFI_D_ERROR,
+               "Unable to Allocate Memory for MultiSlot Partition list\n"));
+              return EFI_OUT_OF_RESOURCES;
+            }
             break;
           }
       }
     }
-    if (MatchCount == (SlotCount - 1)) {
-        TempNode = AllocateZeroPool (sizeof (struct BootPartsLinkedList));
-        if (TempNode) {
-          /*Skip _a/_b from partition name*/
-          StrnCpyS (TempNode->PartName, sizeof (TempNode->PartName),
-                    SearchString, Len - 2);
-          TempNode->Next = HeadNode;
-          HeadNode = TempNode;
-         } else {
-          DEBUG ((EFI_D_ERROR,
-                  "Unable to Allocate Memory for MultiSlot Partition list\n"));
-          return EFI_OUT_OF_RESOURCES;
-        }
-   }
   }
   return EFI_SUCCESS;
 }
@@ -623,7 +621,7 @@ SwitchPtnSlots (CONST CHAR16 *SetActive, CONST CHAR16 *SetInactive )
       if ((StrLen (TempPartitionName) == StrLen (CurSlot)) &&
              !StrnCmp (TempPartitionName, CurSlot, 1 + StrLen (CurSlot))) {
         PtnCurrent = &PtnEntries[i];
-      } else if ((StrLen (TempPartitionName) == StrLen (CurSlot)) &&
+      } else if ((StrLen (TempPartitionName) == StrLen (NewSlot)) &&
                   !StrnCmp (TempPartitionName, NewSlot, 1 + StrLen (NewSlot))) {
         PtnNew = &PtnEntries[i];
       }
@@ -763,7 +761,6 @@ PartitionHasMultiSlot (CONST CHAR16 *Pname)
 
   SlotCount = TempSlotCount;
   if (SlotCount > MIN_SLOTS) {
-    IsMultiSlot_ABC = (TempSlotCount == MAX_SLOTS);
     return TRUE;
   }
 
@@ -1404,7 +1401,6 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
   UINT32 UfsBootLun = 0;
   CHAR8 BootDeviceType[BOOT_DEV_NAME_SIZE_MAX];
   UINT32 TempSlotIndex;
-
   struct PartitionEntry *BootEntry = NULL;
 
   if (NewSlot == NULL) {
@@ -1445,11 +1441,16 @@ SetActiveSlot (Slot *NewSlot, BOOLEAN ResetSuccessBit)
       }
 
       BootEntry->PartEntry.Attributes &=
-             (~PART_ATT_PRIORITY_VAL & ~PART_ATT_ACTIVE_VAL);
-      BootEntry->PartEntry.Attributes |=
+             ( ~PART_ATT_ACTIVE_VAL);
+      if (!IsMultiSlot_ABC) {
+       BootEntry->PartEntry.Attributes &=
+             (~PART_ATT_PRIORITY_VAL);
+       BootEntry->PartEntry.Attributes |=
              (((UINT64)MAX_PRIORITY - 1) << PART_ATT_PRIORITY_BIT);
+      }
     }
   }
+
   UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
   if (StrnCmp (CurrentSlot.Suffix, NewSlot->Suffix,
                StrLen (CurrentSlot.Suffix)) == 0) {
@@ -1494,7 +1495,7 @@ EFI_STATUS HandleActiveSlotUnbootable (VOID)
   Slot Slots[] = {{L"_a"}, {L"_b"}, {L"_c"}};
   UINT64 Unbootable = 0;
   UINT64 BootSuccess = 0;
-  UINT32 TempSlotIndex = 0;
+  UINT64 Priority = 0;
 
   /* Mark current Slot as unbootable */
   GUARD (GetActiveSlot (&ActiveSlot));
@@ -1514,12 +1515,34 @@ EFI_STATUS HandleActiveSlotUnbootable (VOID)
         (PART_ATT_UNBOOTABLE_VAL) & (~PART_ATT_SUCCESSFUL_VAL);
     UpdatePartitionAttributes (PARTITION_ATTRIBUTES);
   }
-  /* AlternateSlot will always be the one which is next to active slot */
-  for ( TempSlotIndex = 0; TempSlotIndex < SlotCount; TempSlotIndex++) {
-    if (StrnCmp (ActiveSlot.Suffix, Slots[TempSlotIndex].Suffix,
-                        StrLen (Slots[TempSlotIndex].Suffix)) == 0) {
-      AlternateSlot = &Slots[((TempSlotIndex + 1) % SlotCount)];
-      break;
+
+/* Selecting the next bootable slot with highest priotrity */
+  for (UINTN SlotIndex = 0; SlotIndex < SlotCount ; SlotIndex++) {
+    struct PartitionEntry *BootPartition =
+        GetBootPartitionEntry (&Slots[SlotIndex]);
+    UINT64 BootPriority = 0;
+    if (BootPartition == NULL) {
+      DEBUG ((EFI_D_ERROR, "GetActiveSlot: No boot partition "
+                           "entry for slot %s\n",
+              Slots[SlotIndex].Suffix));
+      return EFI_NOT_FOUND;
+    }
+
+    BootPriority =
+        (BootPartition->PartEntry.Attributes & PART_ATT_PRIORITY_VAL) >>
+        PART_ATT_PRIORITY_BIT;
+    Unbootable =
+        (BootPartition->PartEntry.Attributes & PART_ATT_UNBOOTABLE_VAL) >>
+        PART_ATT_UNBOOTABLE_BIT;
+    BootSuccess =
+        (BootPartition->PartEntry.Attributes & PART_ATT_SUCCESSFUL_VAL) >>
+        PART_ATT_SUCCESS_BIT;
+
+    if ((Unbootable == 0 &&
+           BootSuccess == 1) &&
+        (BootPriority > Priority)) {
+      AlternateSlot = &Slots[SlotIndex];
+      Priority = BootPriority;
     }
   }
 
@@ -1530,21 +1553,6 @@ EFI_STATUS HandleActiveSlotUnbootable (VOID)
    DEBUG ((EFI_D_VERBOSE, "Alternate slot is %s\n",
           AlternateSlot->Suffix));
 
-  /* Validate Aternate Slot is bootable */
-  BootEntry = GetBootPartitionEntry (AlternateSlot);
-  if (BootEntry == NULL) {
-    DEBUG ((EFI_D_ERROR, "HandleActiveSlotUnbootable: No boot "
-                         "partition entry for slot %s\n",
-            AlternateSlot->Suffix));
-    return EFI_NOT_FOUND;
-  }
-
-  Unbootable = (BootEntry->PartEntry.Attributes & PART_ATT_UNBOOTABLE_VAL) >>
-               PART_ATT_UNBOOTABLE_BIT;
-  BootSuccess = (BootEntry->PartEntry.Attributes & PART_ATT_SUCCESSFUL_VAL) >>
-                PART_ATT_SUCCESS_BIT;
-
-  if (Unbootable == 0 && BootSuccess == 1) {
     DEBUG (
         (EFI_D_INFO, "Alternate Slot %s is bootable\n", AlternateSlot->Suffix));
     GUARD (SetActiveSlot (AlternateSlot, FALSE));
@@ -1556,9 +1564,6 @@ EFI_STATUS HandleActiveSlotUnbootable (VOID)
     DEBUG ((EFI_D_ERROR, "HandleActiveSlotUnbootable: "
                          "gRT->Resetystem didn't work\n"));
     return EFI_LOAD_ERROR;
-  }
-
-  return EFI_LOAD_ERROR;
 }
 
 EFI_STATUS ClearUnbootable (VOID)
