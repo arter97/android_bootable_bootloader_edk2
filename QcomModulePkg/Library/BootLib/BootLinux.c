@@ -1837,7 +1837,7 @@ BOOLEAN IsNANDSquashFsSupport (VOID)
 }
 #endif
 
-#if TARGET_BOARD_TYPE_AUTO
+#if DISPLAY_DISABLE
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 {
   return FALSE;
@@ -1845,6 +1845,6 @@ BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 #else
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 {
-  return TRUE;
+  return FixedPcdGetBool (EnableDisplayMenu);
 }
 #endif
