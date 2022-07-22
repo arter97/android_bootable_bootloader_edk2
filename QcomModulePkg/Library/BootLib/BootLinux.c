@@ -36,6 +36,7 @@
 #include <Library/ShutdownServices.h>
 #include <Library/VerifiedBootMenu.h>
 #include <Library/HypervisorMvCalls.h>
+#include <Library/Rtic.h>
 #include <Protocol/EFIMdtp.h>
 #include <Protocol/EFIScmModeSwitch.h>
 #include <libufdt_sysdeps.h>
@@ -1168,6 +1169,11 @@ BootLinux (BootInfo *Info)
     return Status;
   }
 
+  /* Updating Kernel start Physical address to KP which will be used
+   * by QRKS service later.
+   */
+  GetQrksKernelStartAddress ();
+
   /* Updates the command line from boot image, appends device serial no.,
    * baseband information, etc.
    * Called before ShutdownUefiBootServices as it uses some boot service
@@ -1837,7 +1843,7 @@ BOOLEAN IsNANDSquashFsSupport (VOID)
 }
 #endif
 
-#if TARGET_BOARD_TYPE_AUTO
+#if DISPLAY_DISABLE
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 {
   return FALSE;
@@ -1845,6 +1851,6 @@ BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 #else
 BOOLEAN IsEnableDisplayMenuFlagSupported (VOID)
 {
-  return TRUE;
+  return FixedPcdGetBool (EnableDisplayMenu);
 }
 #endif

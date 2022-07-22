@@ -25,6 +25,43 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+
+/* Changes from Qualcomm Innovation Center are provided under the following
+ * license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *    * Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ *
+ *    * Redistributions in binary form must reproduce the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer in the documentation and/or other materials provided
+ *      with the distribution.
+ *
+ *    * Neither the name of Qualcomm Innovation Center, Inc. nor the names of
+ *      its contributors may be used to endorse or promote products derived
+ *      from this software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include "KeymasterClient.h"
 #include "VerifiedBoot.h"
 #include "libavb/libavb.h"
@@ -393,5 +430,55 @@ KeyMasterGetDateSupport (BOOLEAN *Supported)
   }
 
   *Supported = TRUE;
+  return Status;
+}
+
+EFI_STATUS
+KeyMasterSetRotForLE (KMRotAndBootStateForLE *BootState)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  CHAR8 *RotDigest = NULL;
+  AvbSHA256Ctx RotCtx;
+  KMHandle Handle = {NULL};
+  KMSetRotReq RotReq = {0};
+  KMSetRotRsp RotRsp = {0};
+
+  if (BootState == NULL) {
+    DEBUG ((EFI_D_ERROR, "Invalid parameter BootState\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  /* Compute ROT digest */
+  avb_sha256_init (&RotCtx);
+  avb_sha256_update (&RotCtx, BootState->PublicKeyMod,
+                       BootState->PublicKeyModLength);
+  avb_sha256_update (&RotCtx, BootState->PublicKeyExp,
+                       BootState->PublicKeyExpLength);
+  avb_sha256_update (&RotCtx, &BootState->IsUnlocked,
+                       sizeof (BootState->IsUnlocked));
+  /* RotDigest is a fixed size array, cannot be NULL */
+  RotDigest = (CHAR8 *)avb_sha256_final (&RotCtx);
+
+  /* Load KeyMaster App */
+  GUARD (KeyMasterStartApp (&Handle));
+
+  /* Set ROT */
+  RotReq.CmdId = KEYMASTER_SET_ROT;
+  RotReq.RotOffset = (UINT8 *)&RotReq.RotDigest - (UINT8 *)&RotReq;
+  RotReq.RotSize = sizeof (RotReq.RotDigest);
+  CopyMem (RotReq.RotDigest, RotDigest, AVB_SHA256_DIGEST_SIZE);
+
+  Status = Handle.QseeComProtocol->QseecomSendCmd (
+      Handle.QseeComProtocol, Handle.AppId, (UINT8 *)&RotReq, sizeof (RotReq),
+      (UINT8 *)&RotRsp, sizeof (RotRsp));
+  if (Status != EFI_SUCCESS ||
+        RotRsp.Status != 0) {
+    DEBUG ((EFI_D_ERROR, "KeyMasterSendRotAndBootState: Set ROT err, "
+                         "Status: %r, response status: %d\n",
+            Status, RotRsp.Status));
+    return EFI_LOAD_ERROR;
+  }
+
+  DEBUG ((EFI_D_INFO, "KeyMasterSetRotForLE success\n"));
   return Status;
 }

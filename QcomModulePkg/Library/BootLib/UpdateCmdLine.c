@@ -882,6 +882,7 @@ ClearBootConfigList (LIST_ENTRY* BootConfigListHead)
   Link = GetFirstNode (BootConfigListHead);
   if (!Link) {
     DEBUG ((EFI_D_INFO, "Error in Node entry \n"));
+    return;
   }
 
   while (!IsNull (BootConfigListHead, Link)) {
@@ -947,6 +948,12 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   BOOLEAN BootConfigFlag = FALSE;
 
   BootConfigListHead = (LIST_ENTRY*) AllocateZeroPool (sizeof (LIST_ENTRY));
+  if (!BootConfigListHead) {
+    DEBUG ((EFI_D_ERROR,
+            "Failed to allocate zero pool for BootConfigListHead\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
+
   InitializeListHead (BootConfigListHead);
 
   Status = BoardSerialNum (StrSerialNum, sizeof (StrSerialNum));

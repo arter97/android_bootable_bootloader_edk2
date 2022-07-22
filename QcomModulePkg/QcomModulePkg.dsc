@@ -102,11 +102,11 @@
   !if $(VERIFIED_BOOT_LE)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT_LE
   !endif
+  !if $(DISPLAY_DISABLE)
+      GCC:*_*_*_CC_FLAGS = -DDISPLAY_DISABLE
+  !endif
   !if $(AB_RETRYCOUNT_DISABLE)
       GCC:*_*_*_CC_FLAGS = -DAB_RETRYCOUNT_DISABLE
-  !endif
-  !if $(TARGET_BOARD_TYPE_AUTO) == "1"
-      GCC:*_*_*_CC_FLAGS = -DTARGET_BOARD_TYPE_AUTO
   !endif
   !if $(VERITY_LE)
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE

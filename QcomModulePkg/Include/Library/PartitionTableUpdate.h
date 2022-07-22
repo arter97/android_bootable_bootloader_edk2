@@ -163,7 +163,7 @@ table in the respective position mentioned below.
 /*Slot specific macros*/
 #define MAX_SLOT_SUFFIX_SZ 3
 #define MIN_SLOTS 1
-#define MAX_SLOTS 2
+#define MAX_SLOTS 3
 #define MAX_LUNS 8
 #define NO_LUN -1
 
